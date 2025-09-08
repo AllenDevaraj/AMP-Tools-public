@@ -8,7 +8,7 @@
 #include "MyBugAlgorithm.h"
 
 using namespace amp;
-
+ 
 int main(int argc, char** argv) {
     /*    Include this line to have different randomized environments every time you run your code (NOTE: this has no affect on grade()) */
     amp::RNG::seed(amp::RNG::randiUnbounded());
@@ -46,9 +46,14 @@ int main(int argc, char** argv) {
         bool success = HW2::check(path, problem);
 
         LOG("Found valid solution to workspace 1: " << (success ? "Yes!" : "No :("));
+        LOG("Path length: " << path.length());
 
-        // Visualize the path and environment
-        Visualizer::makeFigure(problem, path);
+        // Visualize the path and environment (with error handling)
+        try {
+            Visualizer::makeFigure(problem, path);
+        } catch (...) {
+            LOG("Visualization error occurred, continuing...");
+        }
     }
 
     // Let's get crazy and generate a random environment and test your algorithm
@@ -62,10 +67,18 @@ int main(int argc, char** argv) {
         LOG("path length: " << path.length());
 
         // Visualize the path environment, and any collision points with obstacles
-        Visualizer::makeFigure(random_prob, path, collision_points);
+        try {
+            Visualizer::makeFigure(random_prob, path, collision_points);
+        } catch (...) {
+            LOG("Random environment visualization error occurred, continuing...");
+        }
     }
 
-    Visualizer::saveFigures(true, "hw2_figs");
+    try {
+        Visualizer::saveFigures(true, "hw2_figs");
+    } catch (...) {
+        LOG("Save figures error occurred, continuing...");
+    }
 
 
     HW2::grade(algo, "nonhuman.biologic@myspace.edu", argc, argv);
