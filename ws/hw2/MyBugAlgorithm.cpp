@@ -1,177 +1,244 @@
 #include "MyBugAlgorithm.h"
 #include <algorithm>
 #include <limits>
-#define _USE_MATH_DEFINES
-#include <math.h>
 
-// =================================================================
-// ALGORITHM PARAMETERS - You can tune these!
-// =================================================================
-static constexpr double STEP_SIZE = 0.1;
-static constexpr double WALL_FOLLOW_DISTANCE = 0.2;
-static constexpr double SENSOR_RANGE = 0.5;
-static constexpr double GOAL_RADIUS = 0.2;
-static constexpr double HIT_POINT_RADIUS = 0.15; // How close to get to the start to count as a full loop
-
-
-amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
-    amp::Path2D path;
-    path.waypoints.push_back(problem.q_init);
-    
-    Eigen::Vector2d current_pos = problem.q_init;
-    int loop_guard = 0;
-
-    while ((current_pos - problem.q_goal).norm() > GOAL_RADIUS && loop_guard++ < 2000) {
-        // STATE 1: MOVE TO GOAL
-        Eigen::Vector2d heading_to_goal = (problem.q_goal - current_pos).normalized();
-        SensorHit front_hit = checkSensor(current_pos, heading_to_goal, (problem.q_goal - current_pos).norm(), problem.obstacles);
-
-        if (!front_hit.found) {
-            // Path to goal is clear, we are done
-            path.waypoints.push_back(problem.q_goal);
-            break;
-        }
-        
-        // Add path to the hit point
-        Eigen::Vector2d hit_point = current_pos + heading_to_goal * front_hit.distance;
-        path.waypoints.push_back(hit_point);
-        current_pos = hit_point;
-
-        // STATE 2: WALL FOLLOW (BUG 1)
-        // Turn left 90 degrees to start the wall follow
-        Eigen::Rotation2Dd turn_left(M_PI / 2.0);
-        Eigen::Vector2d initial_follow_heading = turn_left * heading_to_goal;
-
-        // This single function call now handles the entire Bug 1 process:
-        // discovering the boundary, mapping it, and finding L*.
-        WallFollowResult result = performBug1WallFollow(current_pos, initial_follow_heading, problem);
-
-        // Now, find L* in the path we just discovered
-        size_t l_star_index = 0;
-        double min_dist = std::numeric_limits<double>::infinity();
-        for (size_t i = 0; i < result.discovery_path.size(); ++i) {
-            double dist = (result.discovery_path[i] - problem.q_goal).norm();
-            if (dist < min_dist) {
-                min_dist = dist;
-                l_star_index = i;
-            }
-        }
-        
-        // Append the path from the hit point to L*
-        for (size_t i = 0; i <= l_star_index; ++i) {
-            path.waypoints.push_back(result.discovery_path[i]);
-        }
-        
-        current_pos = result.discovery_path[l_star_index];
-
-        // Leave the obstacle
-        Eigen::Vector2d last_step = (result.discovery_path[l_star_index] - result.discovery_path[l_star_index - 1]).normalized();
-        Eigen::Rotation2Dd turn_right(-M_PI / 2.0);
-        Eigen::Vector2d outward_normal = turn_right * last_step; // Normal is perpendicular to the direction of travel
-        current_pos += outward_normal * 0.1; // Nudge away from the wall
-        path.waypoints.push_back(current_pos);
-    }
-
-    return path;
+namespace {
+    constexpr double EPS            = 1e-9;
+    constexpr double IMPROVE_MIN    = 1e-4;  // require this much improvement at L* vs hit
+    constexpr double LEAVE_EPS      = 2e-3;  // outward nudge size
+    constexpr double GOAL_STEP_EPS  = 2e-3;  // extra push toward goal at leave
 }
 
-
-MyBugAlgorithm::WallFollowResult MyBugAlgorithm::performBug1WallFollow(const Eigen::Vector2d& hit_point, const Eigen::Vector2d& initial_heading, const amp::Problem2D& problem) {
-    WallFollowResult result;
-    result.closest_point_to_goal = hit_point;
-    double min_dist_to_goal = (hit_point - problem.q_goal).norm();
-
-    Eigen::Vector2d current_pos = hit_point;
-    Eigen::Vector2d heading = initial_heading;
-
-    int follow_steps = 0;
-    // Loop until we make a full circle and get back to the hit_point
-    while (follow_steps++ < 10000) {
-        // Reactive steering logic
-        Eigen::Rotation2Dd turn_right(-M_PI / 2.0);
-        Eigen::Rotation2Dd turn_left(M_PI / 2.0);
-        Eigen::Vector2d right_dir = turn_right * heading;
-        Eigen::Vector2d front_dir = heading;
-
-        SensorHit right_sensor = checkSensor(current_pos, right_dir, SENSOR_RANGE, problem.obstacles);
-        SensorHit front_sensor = checkSensor(current_pos, front_dir, WALL_FOLLOW_DISTANCE, problem.obstacles);
-
-        if (front_sensor.found) {
-            heading = turn_left * heading; // Inner corner, turn left
-        } else if (!right_sensor.found || right_sensor.distance > WALL_FOLLOW_DISTANCE * 1.5) {
-            heading = turn_right * heading; // Outer corner, turn right
-        } else {
-            double error = WALL_FOLLOW_DISTANCE - right_sensor.distance;
-            Eigen::Rotation2Dd correction(error * 0.5); // Corrective steering
-            heading = correction * heading;
-        }
-
-        current_pos += STEP_SIZE * heading.normalized();
-        result.discovery_path.push_back(current_pos);
-
-        // While discovering, keep track of the closest point to the goal (L*)
-        double current_dist_to_goal = (current_pos - problem.q_goal).norm();
-        if (current_dist_to_goal < min_dist_to_goal) {
-            min_dist_to_goal = current_dist_to_goal;
-            result.closest_point_to_goal = current_pos;
-        }
-
-        // Check if we have completed a full lap
-        if (follow_steps > 50 && (current_pos - hit_point).norm() < HIT_POINT_RADIUS) {
-            break; // We are back at the start, survey is complete.
-        }
-    }
-    
-    return result;
+// Always return vertices in **CW** order (normalize CCW if needed)
+std::vector<Eigen::Vector2d> MyBugAlgorithm::vertsCW(const amp::Obstacle2D& obs) {
+    std::vector<Eigen::Vector2d> V = obs.verticesCW();
+    if (V.size() < 3) return V;
+    if (signedArea(V) > 0) std::reverse(V.begin(), V.end()); // make CW
+    return V;
 }
 
-
-// =================================================================
-// SENSOR AND INTERSECTION HELPERS
-// =================================================================
-
-MyBugAlgorithm::SensorHit MyBugAlgorithm::checkSensor(const Eigen::Vector2d& pos, const Eigen::Vector2d& dir, double range,
-                                                      const std::vector<amp::Obstacle2D>& obstacles) {
-    SensorHit result;
-    Eigen::Vector2d ray_end = pos + dir.normalized() * range;
-
-    for (const auto& obs : obstacles) {
-        auto vertices = obs.verticesCW();
-        for (size_t i = 0; i < vertices.size(); ++i) {
-            Eigen::Vector2d p1 = vertices[i];
-            Eigen::Vector2d p2 = vertices[(i + 1) % vertices.size()];
-            
-            double t, u;
-            if (segSegIntersect(pos, ray_end, p1, p2, t, u)) {
-                if (t >= -1e-9 && t <= 1.0 + 1e-9) {
-                    double dist = t * range;
-                    if (dist < result.distance) {
-                        result.distance = dist;
-                        result.found = true;
-                    }
-                }
-            }
-        }
+double MyBugAlgorithm::signedArea(const std::vector<Eigen::Vector2d>& V) {
+    double A = 0.0; size_t n = V.size();
+    for (size_t i = 0; i < n; ++i) {
+        const auto& p = V[i];
+        const auto& q = V[(i+1)%n];
+        A += p.x()*q.y() - q.x()*p.y();
     }
-    return result;
+    return 0.5 * A;
 }
 
 bool MyBugAlgorithm::segSegIntersect(const Eigen::Vector2d& p, const Eigen::Vector2d& q,
                                      const Eigen::Vector2d& a, const Eigen::Vector2d& b,
-                                     double& t, double& u) {
-    const Eigen::Vector2d r = q - p;
-    const Eigen::Vector2d s = b - a;
-    const double denom = r.x() * s.y() - r.y() * s.x();
-    const double num_t = (a - p).x() * s.y() - (a - p).y() * s.x();
-    const double num_u = (a - p).x() * r.y() - (a - p).y() * r.x();
+                                     double& t, double& u, Eigen::Vector2d& x) {
+    const Eigen::Vector2d r = q - p, s = b - a;
+    const double denom = r.x()*s.y() - r.y()*s.x();
+    const double num_t = (a.x()-p.x())*s.y() - (a.y()-p.y())*s.x();
+    const double num_u = (a.x()-p.x())*r.y() - (a.y()-p.y())*r.x();
+    if (std::abs(denom) < EPS) return false;     // parallel/collinear
+    t = num_t / denom; u = num_u / denom;
+    if (t < -EPS || t > 1.0 + EPS || u < -EPS || u > 1.0 + EPS) return false;
+    x = p + t * r;
+    return true;
+}
 
-    if (std::abs(denom) < 1e-9) return false;
+Eigen::Vector2d MyBugAlgorithm::closestPointOnSegment(const Eigen::Vector2d& A,
+                                                      const Eigen::Vector2d& B,
+                                                      const Eigen::Vector2d& P,
+                                                      double& t) {
+    const Eigen::Vector2d AB = B - A;
+    const double den = AB.squaredNorm();
+    if (den <= EPS) { t = 0.0; return A; }
+    double tau = (P - A).dot(AB) / den;
+    tau = std::clamp(tau, 0.0, 1.0);
+    t = tau;
+    return A + tau * AB;
+}
 
-    t = num_t / denom;
-    u = num_u / denom;
-
-    if (t >= -1e-9 && t <= 1.0 + 1e-9 && u >= -1e-9 && u <= 1.0 + 1e-9) {
-        return true;
+// For CW polygon, outward (exterior) normal of edge A->B is (-dy, dx)
+static inline Eigen::Vector2d unitOrZero(const Eigen::Vector2d& v) {
+    const double n = v.norm(); return (n>0)? v/n : Eigen::Vector2d(0,0);
+}
+Eigen::Vector2d MyBugAlgorithm::outwardNormal_CWEdge(const Eigen::Vector2d& A,
+                                                     const Eigen::Vector2d& B) {
+    Eigen::Vector2d d = unitOrZero(B-A);
+    return Eigen::Vector2d(-d.y(), d.x());
+}
+Eigen::Vector2d MyBugAlgorithm::outwardNormalAtPointCW(const std::vector<Eigen::Vector2d>& V,
+                                                       size_t e,
+                                                       const Eigen::Vector2d& P) {
+    const size_t n = V.size();
+    const size_t eN = (e+1)%n;
+    const Eigen::Vector2d& A = V[e];
+    const Eigen::Vector2d& B = V[eN];
+    const bool nearA = dist(P,A) <= 1e-7;
+    const bool nearB = dist(P,B) <= 1e-7;
+    if (nearA) {
+        const size_t ePrev = (e+n-1)%n;
+        return unitOrZero(outwardNormal_CWEdge(V[ePrev], V[(ePrev+1)%n]) +
+                          outwardNormal_CWEdge(V[e],    V[(e+1)%n]));
     }
-    return false;
+    if (nearB) {
+        const size_t eNext = (e+1)%n;
+        return unitOrZero(outwardNormal_CWEdge(V[e],    V[(e+1)%n]) +
+                          outwardNormal_CWEdge(V[eNext],V[(eNext+1)%n]));
+    }
+    return outwardNormal_CWEdge(A,B);
+}
+
+// ---- first hit using METRIC min distance filter -----------------------------
+MyBugAlgorithm::Hit
+MyBugAlgorithm::firstHit(const Eigen::Vector2d& s, const Eigen::Vector2d& g,
+                         const std::vector<amp::Obstacle2D>& obstacles,
+                         double min_hit_dist) {
+    Hit best; double bestT = std::numeric_limits<double>::infinity();
+    const double rayLen = (g - s).norm();
+    for (size_t i=0;i<obstacles.size();++i) {
+        auto V = vertsCW(obstacles[i]); const size_t n = V.size();
+        if (n<2) continue;
+        for (size_t e=0;e<n;++e) {
+            const auto& a = V[e]; const auto& b = V[(e+1)%n];
+            double t,u; Eigen::Vector2d X;
+            if (!segSegIntersect(s,g,a,b,t,u,X)) continue;
+            if (t < 0.0 || t > 1.0) continue;
+            const double hitDist = t * rayLen;
+            if (hitDist <= min_hit_dist) continue;  // <---- new robust filter
+            if (t < bestT) { bestT=t; best={true,i,e,t,X}; }
+        }
+    }
+    return best;
+}
+
+// ---- full survey: find L* ---------------------------------------------------
+void MyBugAlgorithm::surveyBoundary_Bug1(const amp::Obstacle2D& O, size_t startEdge,
+                                         const Eigen::Vector2d& hitPoint, Turn turn,
+                                         const Eigen::Vector2d& goal,
+                                         Eigen::Vector2d& Lstar, size_t& L_edge) {
+    auto V = vertsCW(O); const size_t n = V.size();
+    if (n==0) { Lstar=hitPoint; L_edge=startEdge; return; }
+
+    // With CW verts, CCW walking (LEFT) means decreasing edge index.
+    auto nextEdge = [&](size_t e)->size_t {
+        return (turn==LEFT) ? ((e+n-1)%n) : ((e+1)%n);
+    };
+
+    Lstar = hitPoint; L_edge = startEdge;
+    double best = dist(Lstar, goal);
+
+    // One full loop; check continuous closest point on each edge.
+    size_t e = startEdge;
+    for (size_t k=0;k<n;++k) {
+        const auto& A = V[e]; const auto& B = V[(e+1)%n];
+        double tau=0.0; Eigen::Vector2d C = closestPointOnSegment(A,B,goal,tau);
+        const double d = dist(C,goal);
+        if (d + 1e-12 < best - 1e-15) { best=d; Lstar=C; L_edge=e; }
+        e = nextEdge(e);
+    }
+}
+
+// ---- walk boundary from hit to L* -------------------------------------------
+void MyBugAlgorithm::walkToLstar(const amp::Obstacle2D& O, size_t startEdge,
+                                 const Eigen::Vector2d& hitPoint, Turn turn,
+                                 const Eigen::Vector2d& Lstar, size_t L_edge,
+                                 std::vector<Eigen::Vector2d>& polyline) {
+    auto V = vertsCW(O); const size_t n = V.size(); if (n==0) return;
+
+    auto nextEdge = [&](size_t e)->size_t {
+        return (turn==LEFT) ? ((e+n-1)%n) : ((e+1)%n);
+    };
+    auto endVertex = [&](size_t e)->size_t {
+        // end vertex for chosen traversal direction
+        return (turn==LEFT) ? e : ((e+1)%n);
+    };
+
+    if (polyline.empty() || dist(polyline.back(), hitPoint) > 1e-7)
+        polyline.push_back(hitPoint);
+
+    // finish current edge to its end vertex
+    size_t e = startEdge;
+    size_t vEnd = endVertex(e);
+    if (dist(polyline.back(), V[vEnd]) > 1e-9) polyline.push_back(V[vEnd]);
+
+    // walk edge-by-edge until we reach L_edge
+    e = nextEdge(e);
+    int guard=0;
+    while (e != L_edge && guard++ < static_cast<int>(2*n)+10) {
+        size_t v = endVertex(e);
+        if (dist(polyline.back(), V[v]) > 1e-9) polyline.push_back(V[v]);
+        e = nextEdge(e);
+    }
+
+    // append L*
+    if (dist(polyline.back(), Lstar) > 1e-9) polyline.push_back(Lstar);
+}
+
+// ---- append segment ----------------------------------------------------------
+void MyBugAlgorithm::appendSeg(std::vector<Eigen::Vector2d>& out,
+                               const Eigen::Vector2d& a, const Eigen::Vector2d& b) {
+    if (out.empty() || dist(out.back(), a) > 1e-7) out.push_back(a);
+    if (dist(out.back(), b) > 1e-9) out.push_back(b);
+}
+
+// === main planner ============================================================
+amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& prob) {
+    const Eigen::Vector2d qs = prob.q_init;
+    const Eigen::Vector2d qg = prob.q_goal;
+    const auto& obstacles     = prob.obstacles;
+
+    std::vector<Eigen::Vector2d> poly;
+    poly.reserve(512);
+    poly.push_back(qs);
+
+    Eigen::Vector2d cur = qs;
+    double last_d = dist(cur, qg);
+    int outer_guard = 0, stagnant = 0;
+
+    while (dist(cur, qg) > 1e-6 && outer_guard++ < 5000) {
+        // Metric min-hit-dist tied to the leave nudge:
+        const double MIN_HIT_DIST = 5.0 * LEAVE_EPS;
+
+        // 1) straight cast
+        Hit H = firstHit(cur, qg, obstacles, MIN_HIT_DIST);
+        if (!H.hit) {
+            appendSeg(poly, cur, qg);
+            cur = qg;
+            break;
+        }
+        appendSeg(poly, cur, H.point);
+
+        // 2) full circumnavigation => L*
+        Eigen::Vector2d Lstar; size_t L_edge=H.edgeIdx;
+        surveyBoundary_Bug1(obstacles[H.obsIdx], H.edgeIdx, H.point, turn_, qg, Lstar, L_edge);
+
+        // Require meaningful improvement vs hit point
+        if (dist(H.point, qg) - dist(Lstar, qg) < IMPROVE_MIN) {
+            // no progress possible around this obstacle
+            break;
+        }
+
+        // 3) walk boundary back to L*
+        walkToLstar(obstacles[H.obsIdx], H.edgeIdx, H.point, turn_, Lstar, L_edge, poly);
+
+        // 4) peel off: outward + slight goal bias, then re-cast next loop
+        const auto Vcw    = vertsCW(obstacles[H.obsIdx]);
+        const auto n_out  = outwardNormalAtPointCW(Vcw, L_edge, Lstar);
+        const auto g_dir  = unitOrZero(qg - Lstar);
+        const Eigen::Vector2d leavePt = Lstar + LEAVE_EPS*n_out + GOAL_STEP_EPS*g_dir;
+
+        appendSeg(poly, Lstar, leavePt);
+        cur = leavePt;
+
+        // progress guard (avoid livelock)
+        const double dnow = dist(cur, qg);
+        if (last_d - dnow < 1e-4) {
+            if (++stagnant > 50) break;
+        } else {
+            stagnant = 0;
+        }
+        last_d = dnow;
+    }
+
+    amp::Path2D path;
+    path.waypoints = std::move(poly);
+    path.valid = (dist(cur, qg) <= 1e-6);
+    return path;
 }
