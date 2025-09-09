@@ -18,6 +18,7 @@ constexpr double MyBugAlgorithm::GOAL_BIAS_EPS;
 constexpr double MyBugAlgorithm::MIN_LOOP_ARC;
 constexpr int    MyBugAlgorithm::MAX_OUTER_ITERS;
 constexpr int    MyBugAlgorithm::MAX_WALK_STEPS;
+constexpr bool   MyBugAlgorithm::APPEND_FULL_SURVEY_TO_PATH;
 
 // ===== Small helpers =====
 namespace {
@@ -35,6 +36,13 @@ namespace {
     }
     inline void pushUnique(std::vector<Vec2>& poly, const Vec2& q, double tol = 1e-9) {
         if (poly.empty() || (poly.back() - q).norm() > tol) poly.push_back(q);
+    }
+
+    // Optional: lightly decimate a polyline by distance threshold
+    void appendPolyline(std::vector<Vec2>& W, const std::vector<Vec2>& P, double keep = 0.03) {
+        for (const auto& p : P) {
+            if (W.empty() || (p - W.back()).norm() > keep) W.push_back(p);
+        }
     }
 
     // ===== Boolean collision layer (planner never iterates vertices to decide) =====
@@ -116,7 +124,7 @@ MyBugAlgorithm::checkSensor(const Vec2& pos, const Vec2& dir, double range,
                 double mid = 0.5*(lo+hi);
                 Vec2 m = a + u*mid;
                 if (freeSeg(a, m, obstacles)) lo = mid; else hi = mid;
-                if (hi - lo < CONTACT_TOL) break;
+                if (hi - lo < MyBugAlgorithm::CONTACT_TOL) break;
             }
             out.found    = true;
             out.distance = (STEP_SIZE * i) + lo;
@@ -153,7 +161,7 @@ MyBugAlgorithm::performBug1WallFollow(const Vec2& hit_point,
     const int    MIN_STEPS_BEFORE_CLOSE = 120; // stricter than before
     const double H_CORR_GAIN            = 0.20;
 
-    // *** new: robust loop-completion guards ***
+    // robust loop-completion guards
     double loop_len = 0.0;                 // arc length walked
     double cum_turn = 0.0;                 // cumulative signed heading change (≈ 2π for a loop)
     double last_th  = angOf(hd);
@@ -249,6 +257,11 @@ amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
         Vec2 initial_heading_right = turn_right * unit(toGoal);
         auto survey = performBug1WallFollow(hit, initial_heading_right, problem);
 
+        // **OPTIONAL VISUALIZATION**: draw the full surveyed loop
+        if (APPEND_FULL_SURVEY_TO_PATH) {
+            appendPolyline(W, survey.discovery_path, 0.02); // light decimation
+        }
+
         // If L* is not a genuine improvement, Bug-1 declares blocked
         if (dist(hit, problem.q_goal) - dist(survey.closest_point_to_goal, problem.q_goal) < IMPROVE_MIN) {
             break;
@@ -278,7 +291,7 @@ amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
             for (size_t i=0; i<=j && i<N; ++i) pushUnique(W, loop[i]);
         } else {
             for (size_t i=j; i<N; ++i)        pushUnique(W, loop[i]);
-            if ((W.back() - loop.front()).norm() > 1e-9) pushUnique(W, loop.front()); // visual continuity
+            if ((W.back() - loop.front()).norm() > 1e-9) pushUnique(W, loop.front()); // continuity
         }
         pushUnique(W, Lstar);
         cur = Lstar;
