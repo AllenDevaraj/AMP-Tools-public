@@ -30,11 +30,6 @@ private:
     static constexpr int    MAX_OUTER_ITERS    = 1800;
     static constexpr int    MAX_WALK_STEPS     = 250000;
 
-    // *** Visualization switch ***
-    // true  -> also append the full surveyed loop (hit→…→near hit) to the path
-    // false -> only walk the shorter arc to L* (better for grading)
-    static constexpr bool   APPEND_FULL_SURVEY_TO_PATH = true;
-
     // ---------- Sensor output ----------
     struct SensorHit {
         bool   found    = false;                                      // hit along ray?
@@ -57,3 +52,5 @@ private:
                                            const Vec2& initial_heading_right,
                                            const amp::Problem2D& problem);
 };
+
+// ====== BUG-2: separate class (does not modify your Bug-1) =================

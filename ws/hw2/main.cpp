@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
 
     // Declare your algorithm object 
     MyBugAlgorithm algo;
-    
+    //MyBug2Algorithm algo; 
     {
         // Call your algorithm on the problem
         amp::Path2D path = algo.plan(problem);
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     }
 
     // Let's get crazy and generate a random environment and test your algorithm
-    {
+    /*{
         amp::Path2D path; // Make empty path, problem, and collision points, as they will be created by generateAndCheck()
         amp::Problem2D random_prob; 
         std::vector<Eigen::Vector2d> collision_points;
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
         } catch (...) {
             LOG("Random environment visualization error occurred, continuing...");
         }
-    }
+    }*/
 
     try {
         Visualizer::saveFigures(true, "hw2_figs");

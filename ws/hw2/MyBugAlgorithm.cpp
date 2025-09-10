@@ -18,7 +18,6 @@ constexpr double MyBugAlgorithm::GOAL_BIAS_EPS;
 constexpr double MyBugAlgorithm::MIN_LOOP_ARC;
 constexpr int    MyBugAlgorithm::MAX_OUTER_ITERS;
 constexpr int    MyBugAlgorithm::MAX_WALK_STEPS;
-constexpr bool   MyBugAlgorithm::APPEND_FULL_SURVEY_TO_PATH;
 
 // ===== Small helpers =====
 namespace {
@@ -36,13 +35,6 @@ namespace {
     }
     inline void pushUnique(std::vector<Vec2>& poly, const Vec2& q, double tol = 1e-9) {
         if (poly.empty() || (poly.back() - q).norm() > tol) poly.push_back(q);
-    }
-
-    // Optional: lightly decimate a polyline by distance threshold
-    void appendPolyline(std::vector<Vec2>& W, const std::vector<Vec2>& P, double keep = 0.03) {
-        for (const auto& p : P) {
-            if (W.empty() || (p - W.back()).norm() > keep) W.push_back(p);
-        }
     }
 
     // ===== Boolean collision layer (planner never iterates vertices to decide) =====
@@ -124,7 +116,7 @@ MyBugAlgorithm::checkSensor(const Vec2& pos, const Vec2& dir, double range,
                 double mid = 0.5*(lo+hi);
                 Vec2 m = a + u*mid;
                 if (freeSeg(a, m, obstacles)) lo = mid; else hi = mid;
-                if (hi - lo < MyBugAlgorithm::CONTACT_TOL) break;
+                if (hi - lo < CONTACT_TOL) break;
             }
             out.found    = true;
             out.distance = (STEP_SIZE * i) + lo;
@@ -161,7 +153,7 @@ MyBugAlgorithm::performBug1WallFollow(const Vec2& hit_point,
     const int    MIN_STEPS_BEFORE_CLOSE = 120; // stricter than before
     const double H_CORR_GAIN            = 0.20;
 
-    // robust loop-completion guards
+    // *** new: robust loop-completion guards ***
     double loop_len = 0.0;                 // arc length walked
     double cum_turn = 0.0;                 // cumulative signed heading change (≈ 2π for a loop)
     double last_th  = angOf(hd);
@@ -257,51 +249,90 @@ amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
         Vec2 initial_heading_right = turn_right * unit(toGoal);
         auto survey = performBug1WallFollow(hit, initial_heading_right, problem);
 
-        // **OPTIONAL VISUALIZATION**: draw the full surveyed loop
-        if (APPEND_FULL_SURVEY_TO_PATH) {
-            appendPolyline(W, survey.discovery_path, 0.02); // light decimation
-        }
-
         // If L* is not a genuine improvement, Bug-1 declares blocked
         if (dist(hit, problem.q_goal) - dist(survey.closest_point_to_goal, problem.q_goal) < IMPROVE_MIN) {
             break;
         }
 
-        // 3) Walk recorded loop from hit → L* **using the shorter arc**
+        // 3) VISUALIZATION HOOK: append the FULL survey loop so the boundary is fully green
         const auto& loop  = survey.discovery_path;
         const Vec2  Lstar = survey.closest_point_to_goal;
 
-        // find index nearest to L*
-        size_t j = 0; double best = std::numeric_limits<double>::infinity();
-        for (size_t i=0;i<loop.size();++i) {
-            double s = (loop[i] - Lstar).squaredNorm();
-            if (s < best) { best = s; j = i; }
-        }
+        // append entire circumnavigation (loop[0] is the hit point you already pushed)
+        for (size_t i = 1; i < loop.size(); ++i) pushUnique(W, loop[i]);
 
-        auto arcLen = [&](size_t a, size_t b)->double {
+        // Find indices (nearest) of: where we are now (end of loop) and L*
+        auto nearestIdx = [&](const Vec2& q)->size_t {
+            size_t k = 0; double best = std::numeric_limits<double>::infinity();
+            for (size_t i = 0; i < loop.size(); ++i) {
+                double s = (loop[i] - q).squaredNorm();
+                if (s < best) { best = s; k = i; }
+            }
+            return k;
+        };
+
+        const size_t startIdx = nearestIdx(W.back());  // current position (near hit after full loop)
+        const size_t lIdx     = nearestIdx(Lstar);     // index of L*
+
+        // Cyclic forward arc length from i -> j (wrap allowed)
+        auto arcLenFwd = [&](size_t i, size_t j)->double {
+            if (i == j) return 0.0;
             double L = 0.0;
-            for (size_t i = a; i < b; ++i) L += (loop[i+1] - loop[i]).norm();
+            size_t n = loop.size();
+            size_t k = i;
+            while (k != j) {
+                size_t kn = (k + 1) % n;
+                L += (loop[kn] - loop[k]).norm();
+                k = kn;
+            }
             return L;
         };
-        const size_t N = loop.size();
-        double L_forward  = arcLen(0, j);                        // hit(0) → ... → j
-        double L_backward = arcLen(j, N-1) + (loop.back() - loop.front()).norm(); // j → ... → end → hit
+        // Cyclic backward arc length from i -> j
+        auto arcLenBack = [&](size_t i, size_t j)->double {
+            if (i == j) return 0.0;
+            double L = 0.0;
+            size_t n = loop.size();
+            size_t k = i;
+            while (k != j) {
+                size_t kp = (k + n - 1) % n;
+                L += (loop[k] - loop[kp]).norm();
+                k = kp;
+            }
+            return L;
+        };
 
-        if (L_forward <= L_backward) {
-            for (size_t i=0; i<=j && i<N; ++i) pushUnique(W, loop[i]);
+        // Choose shorter way along the boundary from where we are now to L*
+        double Lf = arcLenFwd(startIdx, lIdx);
+        double Lb = arcLenBack(startIdx, lIdx);
+
+        if (Lf <= Lb) {
+            // forward along loop
+            size_t n = loop.size();
+            size_t k = startIdx;
+            while (k != lIdx) {
+                k = (k + 1) % n;
+                pushUnique(W, loop[k]);
+            }
         } else {
-            for (size_t i=j; i<N; ++i)        pushUnique(W, loop[i]);
-            if ((W.back() - loop.front()).norm() > 1e-9) pushUnique(W, loop.front()); // continuity
+            // backward along loop
+            size_t n = loop.size();
+            size_t k = startIdx;
+            while (k != lIdx) {
+                size_t kp = (k + n - 1) % n;
+                pushUnique(W, loop[kp]);
+                k = kp;
+            }
         }
+
+        // We are now exactly at L*
         pushUnique(W, Lstar);
         cur = Lstar;
 
-        // 4) Leave boundary: outward (right-hand outward) + slight goal bias
+        // 4) Leave boundary: outward (right-hand outward) + slight goal bias (unchanged)
         Vec2 outward(0,0);
         if (W.size() >= 2) {
             Vec2 lastDir = unit(W.back() - *(W.end()-2));
             double th_last = angOf(lastDir);
-            // probe right-leaning directions; first that collides → push opposite
             for (int k=0; k<8; ++k) {
                 double th = th_last - M_PI/2.0 + k*(M_PI/16.0);
                 Vec2 probe = cur + 0.5*WALL_DIST*fromAng(th);
@@ -315,8 +346,10 @@ amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
         Vec2 leave = cur + LEAVE_EPS*outward + GOAL_BIAS_EPS*unit(problem.q_goal - cur);
         pushUnique(W, leave);
         cur = leave;
+
     }
 
     path.valid = (dist(cur, problem.q_goal) <= GOAL_RADIUS);
     return path;
 }
+// ====== BUG-2: plan (separate class) =================
