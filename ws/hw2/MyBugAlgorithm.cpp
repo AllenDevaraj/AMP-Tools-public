@@ -172,9 +172,11 @@ MyBugAlgorithm::performBug1WallFollow(const Vec2& hit_point,
         if (front.found) {
             // inner corner
             hd = unit(Rleft * hd);
-        } else if (!right.found || right.distance > WALL_DIST * 2.0) {
+        } else if (!right.found || right.distance > WALL_DIST * 2) {
+            Eigen::Rotation2Dd bias(-M_PI / 18.0); // 10° extra nudge toward wall
+            hd = unit(bias * hd);
             // lost wall / too far
-            hd = unit(Rright * hd);
+            //hd = unit(Rright * hd);
         } else {
             // hold stand-off
             double error = WALL_DIST - right.distance;        // +ve if too close
@@ -208,12 +210,23 @@ MyBugAlgorithm::performBug1WallFollow(const Vec2& hit_point,
         // Full loop detection: must satisfy all guards
         if (steps > MIN_STEPS_BEFORE_CLOSE &&
             loop_len > MIN_LOOP_ARC &&
-            std::fabs(cum_turn) > 2.0*M_PI*0.9 &&   // ~360° of turning
+            std::fabs(cum_turn) > 2.0*M_PI*0.8 &&   // was 0.9
             dist(q, hit_point) < HIT_RADIUS)
         {
-            double dth_close = std::fabs(wrapDiff(angOf(hd), angOf(initial_heading_right)));
-            if (dth_close < 15.0 * M_PI / 180.0) break;
+            // heading gate removed; we already guard on proximity + arc + turn
+            break;
         }
+
+
+        // // Full loop detection: must satisfy all guards
+        // if (steps > MIN_STEPS_BEFORE_CLOSE &&
+        //     loop_len > MIN_LOOP_ARC &&
+        //     std::fabs(cum_turn) > 2.0*M_PI*0.9 &&   // ~360° of turning
+        //     dist(q, hit_point) < HIT_RADIUS)
+        // {
+        //     double dth_close = std::fabs(wrapDiff(angOf(hd), angOf(initial_heading_right)));
+        //     if (dth_close < 15.0 * M_PI / 180.0) break;
+        // }
     }
 
     return R;

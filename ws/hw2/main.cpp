@@ -16,11 +16,11 @@ int main(int argc, char** argv) {
     /*    Randomly generate the problem     */ 
 
     // Use WO1 from Exercise 2
-    Problem2D problem = HW2::getWorkspace1();
+    //Problem2D problem = HW2::getWorkspace1();
 
-    // Use WO1 from Exercise 2
+    // Use WO2 from Exercise 2
     
-    //Problem2D problem = HW2::getWorkspace2();
+    Problem2D problem = HW2::getWorkspace2();
     
 
     // Make a random environment spec, edit properties about it such as the number of obstacles
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     }
 
     // Let's get crazy and generate a random environment and test your algorithm
-    /*{
+    {
         amp::Path2D path; // Make empty path, problem, and collision points, as they will be created by generateAndCheck()
         amp::Problem2D random_prob; 
         std::vector<Eigen::Vector2d> collision_points;
@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
         } catch (...) {
             LOG("Random environment visualization error occurred, continuing...");
         }
-    }*/
+    }
 
     try {
         Visualizer::saveFigures(true, "hw2_figs");

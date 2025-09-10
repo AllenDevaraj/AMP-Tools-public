@@ -17,18 +17,19 @@ private:
     using Vec2 = Eigen::Vector2d;
 
     // ---------- Tunables ----------
-    static constexpr double STEP_SIZE          = 0.06;   // motion step (m-line & wall-follow)
-    static constexpr double CONTACT_TOL        = 1e-3;   // bisection tolerance for contact
-    static constexpr double GOAL_RADIUS        = 0.20;   // done if within this of goal
-    static constexpr double HIT_RADIUS         = 0.15;   // loop closure proximity to hit
-    static constexpr double WALL_DIST          = 0.30;   // desired right-hand stand-off from wall
-    static constexpr double SENSOR_RANGE       = 1.00;   // ray range for side sensor
-    static constexpr double IMPROVE_MIN        = 1e-3;   // L* must be this much closer than hit
-    static constexpr double LEAVE_EPS          = 3e-3;   // outward peel-off nudge
-    static constexpr double GOAL_BIAS_EPS      = 3e-3;   // tiny push toward goal on leave
-    static constexpr double MIN_LOOP_ARC       = 10.0;   // must traverse at least this much boundary
+    static constexpr double STEP_SIZE          = 0.04;   // was 0.06
+    static constexpr double CONTACT_TOL        = 1e-3;
+    static constexpr double GOAL_RADIUS        = 0.20;
+    static constexpr double HIT_RADIUS         = 0.22;   // was 0.15 (easier close near hit)
+    static constexpr double WALL_DIST          = 0.22;   // was 0.30 (better for narrow gaps)
+    static constexpr double SENSOR_RANGE       = 2.00;   // was 1.00 (more reliable re-acquire)
+    static constexpr double IMPROVE_MIN        = 1e-4;   // was 1e-3 (don’t declare blocked too early)
+    static constexpr double LEAVE_EPS          = 1e-2;   // was 3e-3 (peel off a tad more)
+    static constexpr double GOAL_BIAS_EPS      = 3e-3;
+    static constexpr double MIN_LOOP_ARC       = 4.0;    // was 10.0 (random obstacles can be small)
     static constexpr int    MAX_OUTER_ITERS    = 1800;
-    static constexpr int    MAX_WALK_STEPS     = 250000;
+    static constexpr int    MAX_WALK_STEPS     = 300000; // tiny headroom
+
 
     // ---------- Sensor output ----------
     struct SensorHit {
