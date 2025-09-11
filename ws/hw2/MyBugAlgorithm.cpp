@@ -172,7 +172,7 @@ MyBugAlgorithm::performBug1WallFollow(const Vec2& hit_point,
         if (front.found) {
             // inner corner
             hd = unit(Rleft * hd);
-        } else if (!right.found || right.distance > WALL_DIST * 2) {
+        } else if (!right.found || right.distance > WALL_DIST * 1) {
             Eigen::Rotation2Dd bias(-M_PI / 18.0); // 10° extra nudge toward wall
             hd = unit(bias * hd);
             // lost wall / too far
