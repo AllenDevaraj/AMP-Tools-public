@@ -95,7 +95,7 @@ namespace {
         return inside;
     }
 
-    // Point in free space checker
+    // Is point free
     bool freePoint(const Vec& p, const std::vector<amp::Obstacle2D>& obs) {
         for (const auto& O: obs) {
             auto V = vertsCW(O);
@@ -105,7 +105,7 @@ namespace {
         return true;
     }
 
-    // Segment in free space checker
+    // Is segment free
     bool freeSeg(const Vec& a, const Vec& b, const std::vector<amp::Obstacle2D>& obs) {
         if (!freePoint(a, obs) || !freePoint(b, obs)) return false;
         for (const auto& O: obs) {
