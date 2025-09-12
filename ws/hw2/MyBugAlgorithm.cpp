@@ -5,7 +5,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-// ===== Constants (do not edit order/signatures) =====
+// Constants
 constexpr double MyBugAlgorithm::STEP_SIZE;
 constexpr double MyBugAlgorithm::CONTACT_TOL;
 constexpr double MyBugAlgorithm::GOAL_RADIUS;
@@ -14,32 +14,54 @@ constexpr double MyBugAlgorithm::WALL_DIST;
 constexpr double MyBugAlgorithm::SENSOR_RANGE;
 constexpr double MyBugAlgorithm::IMPROVE_MIN;
 constexpr double MyBugAlgorithm::LEAVE_EPS;
-constexpr double MyBugAlgorithm::GOAL_BIAS_EPS;
+constexpr double MyBugAlgorithm::GOAL_EPS;
 constexpr double MyBugAlgorithm::MIN_LOOP_ARC;
 constexpr int    MyBugAlgorithm::MAX_OUTER_ITERS;
-constexpr int    MyBugAlgorithm::MAX_WALK_STEPS;
+constexpr int    MyBugAlgorithm::MAX_STEPS;
 
-// ===== File-local helpers =====
+// Helpers
 namespace {
+
     using Vec = Eigen::Vector2d;
     constexpr double EPS = 1e-9;
 
-    inline double dist(const Vec& a, const Vec& b) { return (a - b).norm(); }
-    inline Vec    unit(const Vec& v) { double n = v.norm(); return (n > 0.0) ? (v / n) : Vec(1,0); }
-    inline double angle(const Vec& v) { return std::atan2(v.y(), v.x()); }
-    inline Vec    ang2vec(double th) { return Vec(std::cos(th), std::sin(th)); }
-    inline double angDiff(double a, double b) {
-        double d = std::fmod(a - b + M_PI, 2.0*M_PI);
-        if (d < 0) d += 2.0*M_PI;
-        return d - M_PI;
-    }
-    inline void append(std::vector<Vec>& poly, const Vec& q, double tol = 1e-9) {
-        if (poly.empty() || (poly.back() - q).norm() > tol) poly.push_back(q);
+    inline double dist(const Vec& a, const Vec& b) {
+        return (a - b).norm();
     }
 
-    // Segment/segment
-    bool segIntersect(const Vec& p, const Vec& q, const Vec& a, const Vec& b) {
-        const Vec r = q - p, s = b - a;
+    inline Vec unit(const Vec& v) {
+        double n = v.norm();
+        if (n > 0.0) return v / n;
+        return Vec(1.0, 0.0);
+    }
+
+    inline double angle(const Vec& v) {
+        return std::atan2(v.y(), v.x());
+    }
+
+    inline Vec ang2vec(double th) {
+        return Vec(std::cos(th), std::sin(th));
+    }
+
+    inline double angDiff(double a, double b) {
+        double d = std::fmod(a - b + M_PI, 2.0 * M_PI);
+        if (d < 0) d += 2.0 * M_PI;
+        return d - M_PI;
+    }
+
+    inline void append(std::vector<Vec>& path, const Vec& p, double tol = 1e-9) {
+        if (path.empty()) {
+            path.push_back(p);
+            return;
+        }
+        if ((path.back() - p).norm() > tol) {
+            path.push_back(p);
+        }
+    }
+
+    // Segment Intersection checker
+    bool segIntersect(const Vec& p, const Vec& q_cur, const Vec& a, const Vec& b) {
+        const Vec r = q_cur - p, s = b - a;
         const double denom = r.x()*s.y() - r.y()*s.x();
         const double num_t = (a.x()-p.x())*s.y() - (a.y()-p.y())*s.x();
         const double num_u = (a.x()-p.x())*r.y() - (a.y()-p.y())*r.x();
@@ -48,20 +70,20 @@ namespace {
         return (t >= -EPS && t <= 1.0+EPS && u >= -EPS && u <= 1.0+EPS);
     }
 
-    // CW verts
+    // CW ordering of the vertices
     std::vector<Vec> vertsCW(const amp::Obstacle2D& obs) {
         std::vector<Vec> V = obs.verticesCW();
         if (V.size() < 3) return V;
         double A = 0.0;
         for (size_t i=0;i<V.size();++i){
-            const auto& p = V[i]; const auto& q = V[(i+1)%V.size()];
-            A += p.x()*q.y() - q.x()*p.y();
+            const auto& p = V[i]; const auto& q_cur = V[(i+1)%V.size()];
+            A += p.x()*q_cur.y() - q_cur.x()*p.y();
         }
-        if (A > 0) std::reverse(V.begin(), V.end()); // ensure CW
+        if (A > 0) std::reverse(V.begin(), V.end());
         return V;
     }
 
-    // Point in polygon (ray cross)
+    // Point inside obstacle checker
     bool pointInObs(const Vec& P, const std::vector<Vec>& V) {
         bool inside = false; const size_t n = V.size();
         for (size_t i=0, j=n-1; i<n; j=i++){
@@ -73,6 +95,7 @@ namespace {
         return inside;
     }
 
+    // Point in free space checker
     bool freePoint(const Vec& p, const std::vector<amp::Obstacle2D>& obs) {
         for (const auto& O: obs) {
             auto V = vertsCW(O);
@@ -82,6 +105,7 @@ namespace {
         return true;
     }
 
+    // Segment in free space checker
     bool freeSeg(const Vec& a, const Vec& b, const std::vector<amp::Obstacle2D>& obs) {
         if (!freePoint(a, obs) || !freePoint(b, obs)) return false;
         for (const auto& O: obs) {
@@ -92,9 +116,9 @@ namespace {
         }
         return true;
     }
-} // anon
+}
 
-// ===== “Range” sensor =====
+// Range sensor
 MyBugAlgorithm::SensorHit
 MyBugAlgorithm::checkSensor(const Vec& pos, const Vec& dir, double range,
                             const std::vector<amp::Obstacle2D>& obstacles)
@@ -107,7 +131,6 @@ MyBugAlgorithm::checkSensor(const Vec& pos, const Vec& dir, double range,
     for (int i=0; i<N; ++i) {
         Vec b = pos + u * (STEP_SIZE * (i+1));
         if (!freeSeg(a, b, obstacles)) {
-            // localize first contact on [a,b]
             double lo = 0.0, hi = STEP_SIZE;
             for (int it=0; it<40; ++it) {
                 double mid = 0.5*(lo+hi);
@@ -127,206 +150,115 @@ MyBugAlgorithm::checkSensor(const Vec& pos, const Vec& dir, double range,
         out.found    = false;
         out.distance = std::numeric_limits<double>::infinity();
     } else {
-        out.found    = true;
-        out.distance = range;  // conservative
+        out.found    = true; 
+        out.distance = range; 
     }
     return out;
 }
 
-// ===== Bug-1 wall follow (right-hand) =====
+// Bug 1 wall follow
 MyBugAlgorithm::WallFollowResult
 MyBugAlgorithm::Bug1WallFollow(const Vec& hit_point,
                                const Vec& initial_heading_right,
                                const amp::Problem2D& problem)
 {
+    const bool followRight = (side_ == FollowSide::Right);
+
+    double th_side, th_away;
+    double CORNER_SIGN, CORR_SIGN;
+
+    if (followRight) {
+        th_side   = -M_PI / 2.0;   // look toward wall (right-hand)
+        th_away   = +M_PI / 2.0;   // rotate away from wall
+        CORNER_SIGN = -1.0;          // -10° bias toward wall
+        CORR_SIGN = -1.0;          // correction sign
+    } else {
+        th_side   = +M_PI / 2.0;   // look toward wall (left-hand)
+        th_away   = -M_PI / 2.0;   // rotate away from wall
+        CORNER_SIGN = +1.0;          // +10° bias toward wall
+        CORR_SIGN = +1.0;          // correction sign
+    }
+
+    const Eigen::Rotation2Dd Rside(th_side);  // toward wall
+    const Eigen::Rotation2Dd Raway(th_away);  // away from wall
+
     WallFollowResult R;
-    R.closest_point_to_goal = hit_point;
+    R.Lstar = hit_point;
     double best_d = dist(hit_point, problem.q_goal);
 
-    Vec q  = hit_point;
-    Vec hd = unit(initial_heading_right);    // tangent heading (clockwise/right-hand)
-    append(R.discovery_path, q);
+    Vec q_cur  = hit_point;
+    Vec hd;
+    if (side_ == FollowSide::Right) {
+        hd = unit(initial_heading_right);
+    } else {
+        hd = unit(-initial_heading_right);   
+    }
+    append(R.path_gone, q_cur);
 
     const int    MIN_STEPS_BEFORE_CLOSE = 120;
-    const double H_CORR_GAIN            = 0.20;
+    const double P_GAIN            = 0.20;
 
     double loop_len = 0.0;
     double angTurned = 0.0;
     double last_th  = angle(hd);
 
     int steps = 0;
-    while (steps++ < MAX_WALK_STEPS) {
-        // Boolean sensors
-        Eigen::Rotation2Dd Rright(-M_PI/2.0);
-        Eigen::Rotation2Dd Rleft( +M_PI/2.0);
+    while (steps++ < MAX_STEPS) {
         Vec dir_front = hd;
-        Vec dir_right = Rright * hd;
+        Vec dir_side  = Rside * hd;
 
-        auto front = checkSensor(q, dir_front, WALL_DIST,    problem.obstacles);
-        auto right = checkSensor(q, dir_right, SENSOR_RANGE, problem.obstacles);
+        auto front = checkSensor(q_cur, dir_front, WALL_DIST,    problem.obstacles);
+        auto side  = checkSensor(q_cur, dir_side,  SENSOR_RANGE, problem.obstacles);
 
         if (front.found) {
-            hd = unit(Rleft * hd);                  // inner corner
-        } else if (!right.found || right.distance > WALL_DIST * 1.0) {
-            Eigen::Rotation2Dd bias(-M_PI / 18.0);  // bias toward wall
-            hd = unit(bias * hd);
+            hd = unit(Raway * hd);                               // inner corner
+        } else if (!side.found || side.distance > WALL_DIST) {
+            Eigen::Rotation2Dd corner(CORNER_SIGN * (M_PI / 18.0));  // gone off the edge
+            hd = unit(corner * hd);
         } else {
-            double error = WALL_DIST - right.distance;        // +ve if too close
-            Eigen::Rotation2Dd tiny(-H_CORR_GAIN * error);    // steer toward/away
+            double error = WALL_DIST - side.distance;            // maintain wall distance parallely 
+            Eigen::Rotation2Dd tiny(CORR_SIGN * (-P_GAIN * error));
             hd = unit(tiny * hd);
         }
 
-        // Step; handle residual collisions
-        Vec next = q + STEP_SIZE * hd;
-        if (!freeSeg(q, next, problem.obstacles)) {
-            Vec mid = q + 0.5*STEP_SIZE * hd;
-            if (freeSeg(q, mid, problem.obstacles)) next = mid;
-            else { Eigen::Rotation2Dd Rleft(+M_PI/2.0); hd = unit(Rleft * hd); next = q + STEP_SIZE * hd; }
+        // step; resolve residual collisions
+        Vec next = q_cur + STEP_SIZE * hd;
+        if (!freeSeg(q_cur, next, problem.obstacles)) {
+            Vec mid = q_cur + 0.5*STEP_SIZE * hd;
+            if (freeSeg(q_cur, mid, problem.obstacles)) next = mid;
+            else { hd = unit(Raway * hd); next = q_cur + STEP_SIZE * hd; }
         }
 
-        // Accumulate
-        double step_taken = (next - q).norm();
+        // summation of steps taken, angle turned
+        double step_taken = (next - q_cur).norm();
         double th_now = angle(hd);
         double dth    = angDiff(th_now, last_th);
         angTurned    += dth;
         last_th       = th_now;
 
-        q = next;
-        append(R.discovery_path, q);
+        q_cur = next;
+        append(R.path_gone, q_cur);
         loop_len += step_taken;
 
-        // Track L*
-        double d = dist(q, problem.q_goal);
-        if (d + 1e-12 < best_d - 1e-12) { best_d = d; R.closest_point_to_goal = q; }
+        // update L*
+        double d = dist(q_cur, problem.q_goal);
+        if (d + 1e-12 < best_d - 1e-12) { best_d = d; R.Lstar = q_cur; }
 
-        // Full loop detection
+        // loop close
         if (steps > MIN_STEPS_BEFORE_CLOSE &&
             loop_len > MIN_LOOP_ARC &&
             std::fabs(angTurned) > 2.0*M_PI*0.8 &&
-            dist(q, hit_point) < HIT_RADIUS) {
+            dist(q_cur, hit_point) < HIT_RADIUS) {
             break;
         }
     }
+
+    R.arc_length        = loop_len;
+    last_boundary_arc_  = loop_len;
     return R;
 }
 
-// ===== Dispatcher =====
-amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
-    return (mode_ == BugMode::Bug1) ? planBug1(problem)
-                                    : planBug2(problem);
-}
-
-// ===== Bug-1 plan (your existing body, unchanged except name) =====
-amp::Path2D MyBugAlgorithm::planBug1(const amp::Problem2D& problem) {
-    using Vec = Eigen::Vector2d;
-
-    amp::Path2D path;
-    std::vector<Vec>& W = path.waypoints;
-
-    Vec cur = problem.q_init;
-    append(W, cur);
-
-    int outer_guard = 0;
-    while (dist(cur, problem.q_goal) > GOAL_RADIUS && outer_guard++ < MAX_OUTER_ITERS) {
-        // 1) Go-to-goal until contact (boolean range)
-        Vec toGoal = problem.q_goal - cur;
-        SensorHit front = checkSensor(cur, toGoal, toGoal.norm(), problem.obstacles);
-
-        if (!front.found) {
-            append(W, problem.q_goal);
-            cur = problem.q_goal;
-            break;
-        }
-
-        // move to hit
-        Vec hit = cur + unit(toGoal) * front.distance;
-        append(W, hit);
-        cur = hit;
-
-        // 2) Full survey (RIGHT-hand follow)
-        Eigen::Rotation2Dd turn_right(-M_PI / 2.0);
-        Vec initial_heading_right = turn_right * unit(toGoal);
-        auto survey = Bug1WallFollow(hit, initial_heading_right, problem);
-
-        // If L* is not a genuine improvement, Bug-1 declares blocked
-        if (dist(hit, problem.q_goal) - dist(survey.closest_point_to_goal, problem.q_goal) < IMPROVE_MIN) {
-            break;
-        }
-
-        // 3) VIS: append the FULL survey loop so the boundary is fully green
-        const auto& loop  = survey.discovery_path;
-        const Vec   Lstar = survey.closest_point_to_goal;
-
-        for (size_t i = 1; i < loop.size(); ++i) append(W, loop[i]);
-
-        // Find indices near current and L*
-        auto nearestIdx = [&](const Vec& q)->size_t {
-            size_t k = 0; double best = std::numeric_limits<double>::infinity();
-            for (size_t i = 0; i < loop.size(); ++i) {
-                double s = (loop[i] - q).squaredNorm();
-                if (s < best) { best = s; k = i; }
-            }
-            return k;
-        };
-
-        const size_t startIdx = nearestIdx(W.back());
-        const size_t lIdx     = nearestIdx(Lstar);
-
-        // Arc length helpers
-        auto arcLenFwd = [&](size_t i, size_t j)->double {
-            if (i == j) return 0.0;
-            double L = 0.0; size_t n = loop.size(); size_t k = i;
-            while (k != j) { size_t kn = (k + 1) % n; L += (loop[kn] - loop[k]).norm(); k = kn; }
-            return L;
-        };
-        auto arcLenBack = [&](size_t i, size_t j)->double {
-            if (i == j) return 0.0;
-            double L = 0.0; size_t n = loop.size(); size_t k = i;
-            while (k != j) { size_t kp = (k + n - 1) % n; L += (loop[k] - loop[kp]).norm(); k = kp; }
-            return L;
-        };
-
-        // Shorter arc to L*
-        double Lf = arcLenFwd(startIdx, lIdx);
-        double Lb = arcLenBack(startIdx, lIdx);
-
-        if (Lf <= Lb) {
-            size_t n = loop.size(); size_t k = startIdx;
-            while (k != lIdx) { k = (k + 1) % n; append(W, loop[k]); }
-        } else {
-            size_t n = loop.size(); size_t k = startIdx;
-            while (k != lIdx) { size_t kp = (k + n - 1) % n; append(W, loop[kp]); k = kp; }
-        }
-
-        // At L*
-        append(W, Lstar);
-        cur = Lstar;
-
-        // 4) Leave boundary (same as before)
-        Vec outward(0,0);
-        if (W.size() >= 2) {
-            Vec lastDir = unit(W.back() - *(W.end()-2));
-            double th_last = angle(lastDir);
-            for (int k=0; k<8; ++k) {
-                double th = th_last - M_PI/2.0 + k*(M_PI/16.0);
-                Vec probe = cur + 0.5*WALL_DIST*ang2vec(th);
-                if (!freePoint(probe, problem.obstacles)) { outward = unit(cur - probe); break; }
-            }
-            if (outward.norm() == 0) outward = ang2vec(th_last + M_PI/2.0);
-        } else {
-            outward = unit(problem.q_goal - cur);
-        }
-
-        Vec leave = cur + LEAVE_EPS*outward + GOAL_BIAS_EPS*unit(problem.q_goal - cur);
-        append(W, leave);
-        cur = leave;
-    }
-
-    path.valid = (dist(cur, problem.q_goal) <= GOAL_RADIUS);
-    return path;
-}
-
-// ===== Bug-2 helpers =====
+// Helper
 bool MyBugAlgorithm::onMLineCloser(const Eigen::Vector2d& p,
                                    const amp::Problem2D& P,
                                    const HitInfo& hit) const
@@ -347,75 +279,191 @@ bool MyBugAlgorithm::onMLineCloser(const Eigen::Vector2d& p,
     return (rho + 1e-12 < hit.rho_H - IMPROVE_MIN);
 }
 
-void MyBugAlgorithm::followRightUntilMLineLeave(Eigen::Vector2d& q,
+// Bug 2 wall follow
+void MyBugAlgorithm::Bug2WallFollow(Eigen::Vector2d& q_cur,
                                                 const HitInfo& hit,
                                                 const amp::Problem2D& P,
                                                 std::vector<Eigen::Vector2d>& out_trace)
 {
-    using Vec = Eigen::Vector2d;
-    Eigen::Rotation2Dd turn_right(-M_PI/2.0), turn_left(+M_PI/2.0);
+    const bool followRight = (side_ == FollowSide::Right);
+    double th_side, th_away;   // to rotate thetas
+    double CORNER_SIGN, CORR_SIGN;
 
-    // Start heading = right-hand tangent w.r.t. goal direction at hit
-    Vec hd = unit(turn_right * unit(P.q_goal - q));
-    append(out_trace, q);
+    if (followRight) {
+        th_side   = -M_PI / 2.0;   // toward wall
+        th_away   = +M_PI / 2.0;   // away from wall
+        CORNER_SIGN = -1.0;          // corner sign
+        CORR_SIGN = -1.0;          // correction sign
+    } else {
+        th_side   = +M_PI / 2.0;
+        th_away   = -M_PI / 2.0;
+        CORNER_SIGN = +1.0;
+        CORR_SIGN = +1.0;
+    }
+
+    const Eigen::Rotation2Dd Rside(th_side);
+    const Eigen::Rotation2Dd Raway(th_away);
+
+    // heading direction initializing
+    Vec hd = unit(Rside * unit(P.q_goal - q_cur));
+    append(out_trace, q_cur);
 
     const int    MIN_STEPS_BEFORE_CLOSE = 120;
-    const double H_CORR_GAIN            = 0.20;
+    const double P_GAIN            = 0.20;
 
-    double loop_len = 0.0, cum_turn = 0.0, last_th = angle(hd);
+    double loop_len = 0.0, total_turn = 0.0, last_th = angle(hd);
 
+    // Conditions for wall following
     int steps = 0;
-    while (steps++ < MAX_WALK_STEPS) {
-        // Sensors
+    while (steps++ < MAX_STEPS) {
         Vec dir_front = hd;
-        Vec dir_right = turn_right * hd;
+        Vec dir_side  = Rside * hd;
 
-        auto front = checkSensor(q, dir_front, WALL_DIST,    P.obstacles);
-        auto right = checkSensor(q, dir_right, SENSOR_RANGE, P.obstacles);
+        auto front = checkSensor(q_cur, dir_front, WALL_DIST,    P.obstacles);
+        auto side  = checkSensor(q_cur, dir_side,  SENSOR_RANGE, P.obstacles);
 
         if (front.found) {
-            hd = unit(turn_left * hd);
-        } else if (!right.found || right.distance > WALL_DIST * 1.0) {
-            Eigen::Rotation2Dd bias(-M_PI / 18.0);
-            hd = unit(bias * hd);
+            hd = unit(Raway * hd); // inner corner
+        } else if (!side.found || side.distance > WALL_DIST) {
+            Eigen::Rotation2Dd corner(CORNER_SIGN * (M_PI / 18.0));
+            hd = unit(corner * hd); // gone off the edge
         } else {
-            double error = WALL_DIST - right.distance;
-            Eigen::Rotation2Dd tiny(-H_CORR_GAIN * error);
-            hd = unit(tiny * hd);
+            double error = WALL_DIST - side.distance;
+            Eigen::Rotation2Dd tiny(CORR_SIGN * (-P_GAIN * error));
+            hd = unit(tiny * hd); // maintain wall distance parallely
         }
 
-        // Step and fix residual collisions
-        Vec next = q + STEP_SIZE * hd;
-        if (!freeSeg(q, next, P.obstacles)) {
-            Vec mid = q + 0.5*STEP_SIZE * hd;
-            if (freeSeg(q, mid, P.obstacles)) next = mid;
-            else { hd = unit(turn_left * hd); next = q + STEP_SIZE * hd; }
+        Vec next = q_cur + STEP_SIZE * hd;
+        if (!freeSeg(q_cur, next, P.obstacles)) {
+            Vec mid = q_cur + 0.5*STEP_SIZE * hd;
+            if (freeSeg(q_cur, mid, P.obstacles)) next = mid;
+            else { hd = unit(Raway * hd); next = q_cur + STEP_SIZE * hd; }
         }
 
-        // accumulate
-        const double step_taken = (next - q).norm();
+        const double step_taken = (next - q_cur).norm();
         const double th_now = angle(hd);
         const double dth    = angDiff(th_now, last_th);
-        cum_turn += dth; last_th = th_now;
+        total_turn += dth; last_th = th_now;
 
-        q = next;
-        append(out_trace, q);
+        q_cur = next;
+        append(out_trace, q_cur);
         loop_len += step_taken;
 
-        // Bug-2 leave: on M-line and closer than at hit
-        if (onMLineCloser(q, P, hit)) return;
+        if (onMLineCloser(q_cur, P, hit)) { last_boundary_arc_ = loop_len; return; }
 
-        // Loop closed near H -> give up (blocked)
         if (steps > MIN_STEPS_BEFORE_CLOSE &&
             loop_len > MIN_LOOP_ARC &&
-            std::fabs(cum_turn) > 2.0*M_PI*0.8 &&
-            dist(q, hit.H) < HIT_RADIUS) {
+            std::fabs(total_turn) > 2.0*M_PI*0.8 &&
+            dist(q_cur, hit.H) < HIT_RADIUS) {
+            last_boundary_arc_ = loop_len;
             return;
         }
     }
 }
 
-// ===== Bug-2 plan =====
+amp::Path2D MyBugAlgorithm::plan(const amp::Problem2D& problem) {
+    if (mode_ == BugMode::Bug1) {
+        return planBug1(problem);
+    } else {
+        return planBug2(problem);
+    }
+}
+
+
+// Bug 1 plan
+amp::Path2D MyBugAlgorithm::planBug1(const amp::Problem2D& problem) {
+    using Vec = Eigen::Vector2d;
+
+    amp::Path2D path;
+    std::vector<Vec>& W = path.waypoints;
+
+    Vec cur = problem.q_init;
+    append(W, cur);
+
+    int outer_guard = 0;
+    while (dist(cur, problem.q_goal) > GOAL_RADIUS && outer_guard++ < MAX_OUTER_ITERS) {
+        // Go to goal until hit
+        Vec toGoal = problem.q_goal - cur;
+        SensorHit front = checkSensor(cur, toGoal, toGoal.norm(), problem.obstacles);
+
+        if (!front.found) {
+            append(W, problem.q_goal);
+            cur = problem.q_goal;
+            break;
+        }
+
+        Vec hit = cur + unit(toGoal) * front.distance;
+        append(W, hit);
+        cur = hit;
+
+        // Fix initial heading for wall follow
+        Vec u = unit(toGoal);
+        double th = std::atan2(u.y(), u.x());
+        if (side_ == FollowSide::Right) {
+            th += -M_PI / 2.0;
+        }
+        else {                            
+            th += +M_PI / 2.0;
+        }
+
+        Vec initial_heading_side = Vec(std::cos(th), std::sin(th));
+        auto survey = Bug1WallFollow(hit, initial_heading_side, problem);
+
+        // Log waypoints of wall follow
+        const auto& loop  = survey.path_gone;
+        const Vec   Lstar = survey.Lstar;
+        for (size_t i = 1; i < loop.size(); ++i) append(W, loop[i]);
+
+        // Find shortest route to backtrack
+        auto nearestIdx = [&](const Vec& q)->size_t {
+            size_t k = 0; double best = std::numeric_limits<double>::infinity();
+            for (size_t i = 0; i < loop.size(); ++i) {
+                double s = (loop[i] - q).squaredNorm();
+                if (s < best) { 
+                    best = s; k = i; 
+                }
+            }
+            return k;
+        };
+
+        size_t n   = loop.size();
+        size_t k   = nearestIdx(W.back());  
+        size_t kL  = nearestIdx(Lstar);     
+
+        while (k != kL) {
+            k = (k + 1) % n;
+            append(W, loop[k]);
+        }
+
+        append(W, Lstar);
+        cur = Lstar;
+
+
+        // Leave towards goal
+        Vec outward(0,0);
+        if (W.size() >= 2) {
+            Vec lastDir = unit(W.back() - *(W.end()-2));
+            double th_last = angle(lastDir);
+            for (int k=0; k<8; ++k) {
+                double th = th_last - M_PI/2.0 + k*(M_PI/16.0);
+                Vec probe = cur + 0.5*WALL_DIST*ang2vec(th);
+                if (!freePoint(probe, problem.obstacles)) { outward = unit(cur - probe); break; }
+            }
+            if (outward.norm() == 0) outward = ang2vec(th_last + M_PI/2.0);
+        } else {
+            outward = unit(problem.q_goal - cur);
+        }
+
+        Vec leave = cur + LEAVE_EPS*outward + GOAL_EPS*unit(problem.q_goal - cur);
+        append(W, leave);
+        cur = leave;
+    }
+
+    path.valid = (dist(cur, problem.q_goal) <= GOAL_RADIUS);
+    return path;
+}
+
+// Bug 2 plan
 amp::Path2D MyBugAlgorithm::planBug2(const amp::Problem2D& P) {
     using Vec = Eigen::Vector2d;
 
@@ -427,7 +475,7 @@ amp::Path2D MyBugAlgorithm::planBug2(const amp::Problem2D& P) {
 
     int outer_guard = 0;
     while (dist(cur, P.q_goal) > GOAL_RADIUS && outer_guard++ < MAX_OUTER_ITERS) {
-        // 1) Go-to-goal until contact
+        // Go to goal until hit
         Vec toGoal = P.q_goal - cur;
         SensorHit front = checkSensor(cur, toGoal, toGoal.norm(), P.obstacles);
 
@@ -437,12 +485,11 @@ amp::Path2D MyBugAlgorithm::planBug2(const amp::Problem2D& P) {
             break;
         }
 
-        // Move to hitpoint H
         Vec H = cur + unit(toGoal) * front.distance;
         append(W, H);
         cur = H;
 
-        // 2) Follow boundary until M-line (closer) or loop close
+        // Follow boundary until M-line gets closer or loop ends
         HitInfo hit;
         hit.H     = H;
         hit.rho_H = dist(H, P.q_goal);
@@ -451,17 +498,12 @@ amp::Path2D MyBugAlgorithm::planBug2(const amp::Problem2D& P) {
         hit.m_hat = unit(hit.B - hit.A);
 
         std::vector<Vec> trace;
-        followRightUntilMLineLeave(cur, hit, P, trace);
+        Bug2WallFollow(cur, hit, P, trace);
 
-        // Append traced boundary (for visualization)
+        // Traced boundary for visualization
         for (size_t i = 1; i < trace.size(); ++i) append(W, trace[i]);
-
-        // 3) If not on a valid leave point, we are blocked
-        if (!onMLineCloser(cur, P, hit)) {
-            break;
-        }
-
-        // 4) Leave boundary immediately toward goal (reuse Bug-1 nudge)
+ 
+        // Leave boundary towards goal
         Vec outward(0,0);
         if (W.size() >= 2) {
             Vec lastDir = unit(W.back() - *(W.end()-2));
@@ -476,7 +518,7 @@ amp::Path2D MyBugAlgorithm::planBug2(const amp::Problem2D& P) {
             outward = unit(P.q_goal - cur);
         }
 
-        Vec leave = cur + LEAVE_EPS*outward + GOAL_BIAS_EPS*unit(P.q_goal - cur);
+        Vec leave = cur + LEAVE_EPS*outward + GOAL_EPS*unit(P.q_goal - cur);
         append(W, leave);
         cur = leave;
     }
