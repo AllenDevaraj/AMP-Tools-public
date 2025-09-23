@@ -56,11 +56,11 @@ int main(int argc, char** argv) {
         catch (...) { LOG("Visualization error occurred (Bug 2), continuing..."); }
     }
 
-    try {
-    Visualizer::saveFigures(true, "hw2_figs");
-    } catch (...) {
-    LOG("Save figures error occurred, continuing...");
-}
+    // try {
+    // Visualizer::saveFigures(true, "hw2_figs");
+    // } catch (...) {
+    // LOG("Save figures error occurred, continuing...");
+
     // Use the templated grader since MyBugAlgorithm does NOT derive from amp::BugAlgorithm.
     // Grade Bug 1 by default; pass constructor args (mode, side).
     // HW2::grade<MyBugAlgorithm>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv,
