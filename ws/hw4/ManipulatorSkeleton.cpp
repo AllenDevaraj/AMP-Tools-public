@@ -6,7 +6,7 @@ MyManipulator2D::MyManipulator2D()
     : LinkManipulator2D({1.0, 1.0}) 
 {}
 
-// Constructor for a vector of link lengths
+// Constructor that takes a vector of link lengths
 MyManipulator2D::MyManipulator2D(const std::vector<double>& link_lengths) 
     : LinkManipulator2D(link_lengths) 
 {}
@@ -24,7 +24,6 @@ Eigen::Vector2d MyManipulator2D::getJointLocation(const amp::ManipulatorState& s
     Eigen::Vector2d joint_location(0.0, 0.0);
     double cumulative_angle = 0.0;
     
-    // Sum the vectors of the links up to the desired joint
     for (uint32_t i = 0; i < joint_index; ++i) {
         cumulative_angle += (*state_ptr)(i);
         joint_location.x() += m_link_lengths[i] * cos(cumulative_angle);
@@ -34,46 +33,35 @@ Eigen::Vector2d MyManipulator2D::getJointLocation(const amp::ManipulatorState& s
     return joint_location;
 }
 
-// Inverse Kinematics for a 3-Link Manipulator
+// Inverse Kinematics for a 2-Link Manipulator
 amp::ManipulatorState MyManipulator2D::getConfigurationFromIK(const Eigen::Vector2d& end_effector_location) const {
-    // If you have different implementations for 2/3/n link manipulators, you can separate them here
-    if (nLinks() != 3) {
+    // This implementation is for a 2-link manipulator.
+    if (nLinks() != 2) {
         amp::ManipulatorState state(nLinks());
-        state.setZero(); 
+        state.setZero();
         return state;
     }
 
-    const double x_e = end_effector_location.x();
-    const double y_e = end_effector_location.y();
-    const double a1 = m_link_lengths[0];
-    const double a2 = m_link_lengths[1];
-    const double a3 = m_link_lengths[2];
+    amp::ManipulatorState state(2);
+    const double x = end_effector_location.x();
+    const double y = end_effector_location.y();
+    const double l1 = m_link_lengths[0];
+    const double l2 = m_link_lengths[1];
 
-    amp::ManipulatorState state(3);
-
-    // Assume absolute orientation of the final link is 0 radians
-    const double phi_e = 0.0;
-
-    // Link between 2 and 3 position
-    const double x_w = x_e - a3 * cos(phi_e);
-    const double y_w = y_e - a3 * sin(phi_e);
-
-    // IK to move wrist
-    const double cos_theta2 = (x_w*x_w + y_w*y_w - a1*a1 - a2*a2) / (2.0 * a1 * a2);
-
-    // Check if target is reachable
-    if (cos_theta2 < -1.0 || cos_theta2 > 1.0) {
-        state.setZero(); // If unreachable
+    const double distance_squared = x*x + y*y;
+    // Check if the target is reachable
+    if (distance_squared > (l1 + l2) * (l1 + l2) || distance_squared < (l1 - l2) * (l1 - l2)) {
+        state.setZero();
         return state;
     }
-    
-    // Alternate configuration
+
+    // Calculate theta2 using the Law of Cosines (elbow up)
+    const double cos_theta2 = (x*x + y*y - l1*l1 - l2*l2) / (2.0 * l1 * l2);
     const double theta2 = -acos(cos_theta2);
-    const double theta1 = atan2(y_w, x_w) - atan2(a2 * sin(theta2), a1 + a2 * cos(theta2));
 
-    // Calculate last angle theta3
-    const double theta3 = phi_e - theta1 - theta2;
+    // Calculate theta1
+    const double theta1 = atan2(y, x) - atan2(l2 * sin(theta2), l1 + l2 * cos(theta2));
 
-    state << theta1, theta2, theta3;
+    state << theta1, theta2;
     return state;
 }
