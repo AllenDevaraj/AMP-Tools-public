@@ -1,15 +1,9 @@
-// This includes all of the necessary header files in the toolbox
 #include "AMPCore.h"
-
-// Include the correct homework header
 #include "hw/HW4.h"
-
-// Include the headers for HW4 code
+#include "ManipulatorSkeleton.h" 
 #include "CSpaceSkeleton.h"
-#include "ManipulatorSkeleton.h"
-
-// Include the header of the shared class
 #include "HelpfulClass.h"
+#include <iostream>
 
 using namespace amp;
 
@@ -17,27 +11,34 @@ int main(int argc, char** argv) {
     /* Include this line to have different randomized environments every time you run your code (NOTE: this has no affect on grade()) */
     amp::RNG::seed(amp::RNG::randiUnbounded());
 
-    MyManipulator2D manipulator;
+    // 2. a) FK 
+    std::cout << "Running (a): Forward Kinematics " << std::endl;
+    MyManipulator2D manipulator_a({0.5, 1.0, 0.5});
+    amp::ManipulatorState state_a(3);
+    state_a << M_PI/6.0, M_PI/3.0, 7.0*M_PI/4.0;
 
-    // You can visualize your manipulator given an angle state like so:
-    amp::ManipulatorState test_state;
-    test_state.setZero();
-    // The visualizer uses your implementation of forward kinematics to show the joint positions so you can use that to test your FK algorithm
-    Visualizer::makeFigure(manipulator, test_state); 
+    Eigen::Vector2d end_effector_a = manipulator_a.getJointLocation(state_a, 3);
+    std::cout << "End-effector location: (" << end_effector_a.x() << ", " << end_effector_a.y() << ")" << std::endl;
+    
+    amp::Visualizer::makeFigure(manipulator_a, state_a);
 
-    // Create the collision space constructor
-    std::size_t n_cells = 5;
-    MyManipulatorCSConstructor cspace_constructor(n_cells);
+    // 2. b) IK
+    std::cout << "\nRunning (b): Inverse Kinematics " << std::endl;
+    MyManipulator2D manipulator_b({1.0, 0.5, 1.0});
+    Eigen::Vector2d target_b(2.0, 0.0);
 
-    // Create the collision space using a given manipulator and environment
-    std::unique_ptr<amp::GridCSpace2D> cspace = cspace_constructor.construct(manipulator, HW4::getEx3Workspace1());
+    amp::ManipulatorState state_b = manipulator_b.getConfigurationFromIK(target_b);
+    std::cout << "Target end-effector location: (" << target_b.x() << ", " << target_b.y() << ")" << std::endl;
+    std::cout << "Calculated angles (rad): theta1=" << state_b[0] << ", theta2=" << state_b[1] << ", theta3=" << state_b[2] << std::endl;
+    std::cout << "Stated assumption: The final link has an absolute orientation of 0 radians." << std::endl;
 
+    amp::Visualizer::makeFigure(manipulator_b, state_b);
     // You can visualize your cspace 
-    Visualizer::makeFigure(*cspace);
+    // Visualizer::makeFigure(*cspace);
 
     Visualizer::saveFigures();
 
     // Grade method
-    amp::HW4::grade<MyManipulator2D>(cspace_constructor, "nonhuman.biologic@myspace.edu", argc, argv);
+    // amp::HW4::grade<MyManipulator2D>(cspace_constructor, "nonhuman.biologic@myspace.edu", argc, argv);
     return 0;
 }
