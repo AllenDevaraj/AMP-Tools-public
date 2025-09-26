@@ -1,109 +1,161 @@
 #include "ManipulatorSkeleton.h"
 #include <cmath>
+#include <vector>
+#include <algorithm>
 
-MyManipulator2D::MyManipulator2D() 
-    : LinkManipulator2D({1.0, 1.0}) 
-{}
+// Helpers
+namespace {
+inline double wrapPi(double a) { return std::atan2(std::sin(a), std::cos(a)); }
+inline double clampUnit(double v){ return v < -1.0 ? -1.0 : (v > 1.0 ? 1.0 : v); }
 
-MyManipulator2D::MyManipulator2D(const std::vector<double>& link_lengths) 
-    : LinkManipulator2D(link_lengths) 
-{}
-
-// Forward Kinematics
-Eigen::Vector2d MyManipulator2D::getJointLocation(const amp::ManipulatorState& state, uint32_t joint_index) const {
-    const amp::ManipulatorState* state_ptr = &state;
-    amp::ManipulatorState temp_state;
-    if (state.size() != nLinks()) {
-        temp_state.resize(nLinks());
-        temp_state.setZero();
-        state_ptr = &temp_state;
+inline Eigen::Vector2d fkEE(const std::vector<double>& L, const amp::ManipulatorState& q){
+    Eigen::Vector2d p(0.0, 0.0);
+    double c = 0.0;
+    for (std::size_t i=0;i<L.size();++i){
+        c += q(i);
+        p.x() += L[i]*std::cos(c);
+        p.y() += L[i]*std::sin(c);
     }
-    
-    Eigen::Vector2d joint_location(0.0, 0.0);
-    double cumulative_angle = 0.0;
-    
-    for (uint32_t i = 0; i < joint_index; ++i) {
-        cumulative_angle += (*state_ptr)(i);
-        joint_location.x() += m_link_lengths[i] * cos(cumulative_angle);
-        joint_location.y() += m_link_lengths[i] * sin(cumulative_angle);
-    }
-
-    return joint_location;
+    return p;
 }
 
-// Inverse Kinematics
-amp::ManipulatorState MyManipulator2D::getConfigurationFromIK(const Eigen::Vector2d& end_effector_location) const {
-    
-    // 2 Link
-    if (nLinks() == 2) {
-        amp::ManipulatorState state(2);
-        const double x = end_effector_location.x();
-        const double y = end_effector_location.y();
-        const double l1 = m_link_lengths[0];
-        const double l2 = m_link_lengths[1];
+inline void solve2R(double L1, double L2, double tx, double ty, int elbowSign,
+                    double& th1, double& th2){
+    const double r2 = tx*tx + ty*ty;
+    double c2 = clampUnit((r2 - L1*L1 - L2*L2) / (2.0*L1*L2));
+    double s2 = std::sqrt(std::max(0.0, 1.0 - c2*c2));
+    if (elbowSign < 0) s2 = -s2;
+    th2 = std::atan2(s2, c2);
+    th1 = std::atan2(ty, tx) - std::atan2(L2*s2, L1 + L2*c2);
+    th1 = wrapPi(th1); th2 = wrapPi(th2);
+}
+} // namespace
 
-        const double distance_squared = x*x + y*y;
-        if (distance_squared > (l1 + l2) * (l1 + l2) || distance_squared < (l1 - l2) * (l1 - l2)) {
-            state.setZero();
-            return state;
-        }
+MyManipulator2D::MyManipulator2D()
+    : LinkManipulator2D({1.0, 1.0}) {}
 
-        const double cos_theta2 = (x*x + y*y - l1*l1 - l2*l2) / (2.0 * l1 * l2);
-        const double theta2 = -acos(cos_theta2); // Elbow up
-        const double theta1 = atan2(y, x) - atan2(l2 * sin(theta2), l1 + l2 * cos(theta2));
-        state << theta1, theta2;
-        return state;
-    } 
-    // 3 Link
-    else if (nLinks() == 3) {
-        amp::ManipulatorState state(3);
-        const double x = end_effector_location.x();
-        const double y = end_effector_location.y();
-        const double a1 = m_link_lengths[0];
-        const double a2 = m_link_lengths[1];
-        const double a3 = m_link_lengths[2];
+MyManipulator2D::MyManipulator2D(const std::vector<double>& link_lengths)
+    : LinkManipulator2D(link_lengths) {}
 
-        // Assumption: theta3 = 0
-        const double theta3 = 0.0;
-        const double l1_virtual = a1;
-        const double l2_virtual = a2 + a3;
+Eigen::Vector2d
+MyManipulator2D::getJointLocation(const amp::ManipulatorState& state, uint32_t joint_index) const {
+    if (joint_index == 0) return {0.0, 0.0};
+    const auto& L = getLinkLengths();
+    const uint32_t J = std::min<uint32_t>(joint_index, static_cast<uint32_t>(L.size()));
 
-        const double distance_squared = x*x + y*y;
-        if (distance_squared > (l1_virtual + l2_virtual) * (l1_virtual + l2_virtual)) {
-            state.setZero(); // Target is unreachable
-            return state;
-        }
-
-        const double cos_theta2 = (x*x + y*y - l1_virtual*l1_virtual - l2_virtual*l2_virtual) / (2.0 * l1_virtual * l2_virtual);
-        if (cos_theta2 < -1.0 || cos_theta2 > 1.0) {
-             state.setZero();
-             return state;
-        }
-
-        const double theta2 = -acos(cos_theta2);
-        const double theta1 = atan2(y, x) - atan2(l2_virtual * sin(theta2), l1_virtual + l2_virtual * cos(theta2));
-        
-        state << theta1, theta2, theta3;
-        return state;
+    Eigen::Vector2d p(0.0, 0.0);
+    double th_sum = 0.0;
+    for (uint32_t k = 0; k < J; ++k) {
+        th_sum += state(k);
+        p.x() += L[k] * std::cos(th_sum);
+        p.y() += L[k] * std::sin(th_sum);
     }
-    // n Link
-    else {
-        amp::ManipulatorState current_state(nLinks());
-        current_state.setZero();
-        const int max_iterations = 100;
-        const double tolerance = 1e-3;
-        for (int iter = 0; iter < max_iterations; ++iter) {
-            if ((getJointLocation(current_state, nLinks()) - end_effector_location).norm() < tolerance) break;
-            for (int i = nLinks() - 1; i >= 0; --i) {
-                Eigen::Vector2d joint_pos = getJointLocation(current_state, i);
-                Eigen::Vector2d end_effector_pos = getJointLocation(current_state, nLinks());
-                Eigen::Vector2d vec_to_target = end_effector_location - joint_pos;
-                Eigen::Vector2d vec_to_effector = end_effector_pos - joint_pos;
-                double angle_to_target = atan2(vec_to_target.y(), vec_to_target.x());
-                double angle_to_effector = atan2(vec_to_effector.y(), vec_to_effector.x());
-                current_state(i) += angle_to_target - angle_to_effector;
+    return p;
+}
+
+amp::ManipulatorState
+MyManipulator2D::getConfigurationFromIK(const Eigen::Vector2d& ee) const {
+    const auto& L = getLinkLengths();
+    const std::size_t N = nLinks();
+    amp::ManipulatorState q; q.resize(N); q.setZero();
+
+    const double x = ee.x(), y = ee.y();
+    const double r = std::hypot(x, y);
+
+    if (N == 2){
+        double th1, th2;
+        solve2R(L[0], L[1], x, y, +1, th1, th2);
+        q(0) = th1; q(1) = th2;
+        return q;
+    }
+
+    if (N == 3){
+        const double L1=L[0], L2=L[1], L3=L[2];
+
+        if (r < 1e-12){
+            q.setZero();
+            return q;
+        }
+
+        const double rmin = std::fabs(L1 - L2), rmax = L1 + L2;
+
+        const double phi0   = std::atan2(y, x);
+        const double rw_des = std::max(0.0, r - L3);
+        const double rw_goal= std::min(std::max(rw_des, rmin), rmax);
+
+        const double denom  = std::max(1e-12, 2.0*r*L3);
+        const double cosDel = clampUnit((r*r + L3*L3 - rw_goal*rw_goal)/denom);
+        const double delta  = std::acos(cosDel);
+
+        double bestErr = 1e9;
+        amp::ManipulatorState best = q;
+
+        for (int sPhi : {+1, -1}){
+            const double phi = phi0 + sPhi*delta;
+            const double xw = x - L3*std::cos(phi);
+            const double yw = y - L3*std::sin(phi);
+
+            for (int elbowSign : {+1, -1}){ 
+                double th1, th2;
+                solve2R(L1, L2, xw, yw, elbowSign, th1, th2);
+                const double th3 = wrapPi(phi - th1 - th2);
+
+                amp::ManipulatorState cand(3); cand.setZero();
+                cand(0)=th1; cand(1)=th2; cand(2)=th3;
+
+                const double err = (fkEE(L, cand) - ee).norm();
+                if (err < bestErr){ bestErr = err; best = cand; }
             }
         }
-        return current_state;
+        q = best;
+        return q;
+    }
+
+    // N link
+    {
+        const double totalLen = std::accumulate(L.begin(), L.end(), 0.0);
+        std::vector<Eigen::Vector2d> p(N+1);
+        p[0] = Eigen::Vector2d(0.0, 0.0);
+        for (std::size_t i=0;i<N;++i) p[i+1] = p[i] + Eigen::Vector2d(L[i], 0.0);
+
+        if (r >= totalLen - 1e-12){
+            const Eigen::Vector2d dir = (r>1e-12) ? (ee / r) : Eigen::Vector2d(1.0, 0.0);
+            p[0] = Eigen::Vector2d(0.0, 0.0);
+            for (std::size_t i=0;i<N;++i) p[i+1] = p[i] + dir * L[i];
+        } else {
+            const Eigen::Vector2d base = p[0];
+            const double tol = 1e-8;
+            const int maxIter = 300;
+
+            for (int it=0; it<maxIter; ++it){
+                p[N] = ee;
+                for (int i = static_cast<int>(N)-1; i >= 0; --i){
+                    Eigen::Vector2d dir = p[i] - p[i+1];
+                    double d = dir.norm();
+                    if (d < 1e-12) dir = Eigen::Vector2d(1.0, 0.0), d = 1.0;
+                    dir /= d;
+                    p[i] = p[i+1] + dir * L[i];
+                }
+                p[0] = base;
+                for (std::size_t i=0;i<N;++i){
+                    Eigen::Vector2d dir = p[i+1] - p[i];
+                    double d = dir.norm();
+                    if (d < 1e-12) dir = Eigen::Vector2d(1.0, 0.0), d = 1.0;
+                    dir /= d;
+                    p[i+1] = p[i] + dir * L[i];
+                }
+                if ( (p[N] - ee).norm() <= tol ) break;
+            }
+        }
+
+        double acc = 0.0;
+        for (std::size_t i=0;i<N;++i){
+            Eigen::Vector2d vi = p[i+1] - p[i];
+            double abs_i = std::atan2(vi.y(), vi.x());
+            double rel_i = wrapPi(abs_i - acc);
+            q(i) = rel_i;
+            acc = wrapPi(acc + rel_i);
+        }
+        return q;
     }
 }

@@ -3,7 +3,6 @@
 #include "AMPCore.h"
 #include "hw/HW4.h"
 
-// NOTE: This class now implements a manipulator that can handle an N-link arm (e.g., the 3-link arm from Exercise 2).
 class MyManipulator2D : public amp::LinkManipulator2D {
     public:
         // Default constructor 

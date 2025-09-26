@@ -1,17 +1,29 @@
-/*
 #include "AMPCore.h"
 #include "hw/HW4.h"
-#include "ManipulatorSkeleton.h" 
+#include "ManipulatorSkeleton.h"
 #include "CSpaceSkeleton.h"
-#include "HelpfulClass.h"
 #include <iostream>
 
-using namespace amp;
+// Helper function
+void runTestCase(const std::string& name, const amp::Environment2D& env) {
+    std::cout << "\nRunning Test Case: " << name << std::endl;
+
+    MyManipulator2D manipulator({1.0, 1.0});
+    MyManipulatorCSConstructor cspace_constructor(100);
+    std::unique_ptr<amp::GridCSpace2D> cspace = cspace_constructor.construct(manipulator, env);
+    amp::ManipulatorState zero_state(manipulator.nLinks());
+    zero_state.setZero();
+    amp::Visualizer::makeFigure(env, manipulator, zero_state);
+    
+    //amp::Visualizer::makeFigure(*cspace);
+}
 
 int main(int argc, char** argv) {
-    // Include this line to have different randomized environments every time you run your code (NOTE: this has no affect on grade()) 
     amp::RNG::seed(amp::RNG::randiUnbounded());
 
+    std::size_t n_cells = 5;
+    MyManipulatorCSConstructor cspace_constructor(100);
+    
     // 2. a) FK 
     std::cout << "Running (a): Forward Kinematics " << std::endl;
     MyManipulator2D manipulator_a({0.5, 1.0, 0.5});
@@ -34,41 +46,8 @@ int main(int argc, char** argv) {
     std::cout << "Stated assumption: The final link has an absolute orientation of 0 radians." << std::endl;
 
     amp::Visualizer::makeFigure(manipulator_b, state_b);
-    // You can visualize your cspace 
-    // Visualizer::makeFigure(*cspace);
 
-    Visualizer::saveFigures();
-
-    // Grade method
-    // amp::HW4::grade<MyManipulator2D>(cspace_constructor, "nonhuman.biologic@myspace.edu", argc, argv);
-    return 0;
-}
-*/
-
-#include "AMPCore.h"
-#include "hw/HW4.h"
-#include "ManipulatorSkeleton.h"
-#include "CSpaceSkeleton.h"
-#include <iostream>
-
-// Helper function to run a test case
-void runTestCase(const std::string& name, const amp::Environment2D& env) {
-    std::cout << "\nRunning Test Case: " << name << std::endl;
-
-    MyManipulator2D manipulator({1.0, 1.0});
-    MyManipulatorCSConstructor cspace_constructor(100);
-    std::unique_ptr<amp::GridCSpace2D> cspace = cspace_constructor.construct(manipulator, env);
-    amp::ManipulatorState zero_state(manipulator.nLinks());
-    zero_state.setZero();
-    amp::Visualizer::makeFigure(env, manipulator, zero_state);
-    
-    amp::Visualizer::makeFigure(*cspace);
-}
-
-int main(int argc, char** argv) {
-    MyManipulatorCSConstructor cspace_constructor(100);
-    
-    // (a) A single triangular obstacle
+    // (a) One triangular obstacle
     {
         std::vector<Eigen::Vector2d> vertices_a = {Eigen::Vector2d(0.25, 0.25), Eigen::Vector2d(0.0, 0.75), Eigen::Vector2d(-0.25, 0.25)};
         amp::Environment2D env_a;
@@ -76,7 +55,7 @@ int main(int argc, char** argv) {
         runTestCase("(a) Triangular Obstacle", env_a);
     }
 
-    // (b) Two large rectangular obstacles
+    // (b) Two rectangular obstacles
     {
         std::vector<Eigen::Vector2d> vertices_b1 = {Eigen::Vector2d(-0.25, 1.1), Eigen::Vector2d(-0.25, 2), Eigen::Vector2d(0.25, 2), Eigen::Vector2d(0.25, 1.1)};
         std::vector<Eigen::Vector2d> vertices_b2 = {Eigen::Vector2d(-2, -2), Eigen::Vector2d(-2, -1.8), Eigen::Vector2d(2, -1.8), Eigen::Vector2d(2, -2)};
@@ -96,8 +75,7 @@ int main(int argc, char** argv) {
         runTestCase("(c) Three Different Obstacles", env_c);
     }
 
-    amp::Visualizer::saveFigures();
+    //amp::Visualizer::saveFigures();
     amp::HW4::grade<MyManipulator2D>(cspace_constructor, "AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv);
-    
     return 0;
 }

@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
     }
 
     amp::Visualizer::makeFigure(cspace_slices, angles);
-    amp::Visualizer::saveFigures(); 
+    // amp::Visualizer::saveFigures(); 
 
     return 0;
 }

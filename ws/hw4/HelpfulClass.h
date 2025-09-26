@@ -10,11 +10,6 @@
 #include <math.h>
 
 namespace MotionPlanningHelpers {
-
-    // ===================================
-    // ## General Math & Vector Utilities ##
-    // ===================================
-
     using Vec = Eigen::Vector2d;
 
     inline double dist(const Vec& a, const Vec& b) {
@@ -47,15 +42,10 @@ namespace MotionPlanningHelpers {
         }
     }
 
-    // ======================
-    // ## Collision Checker ##
-    // ======================
-
     class CollisionChecker {
     private:
         static constexpr double EPS = 1e-9;
 
-        // Helper to ensure obstacle vertices are ordered clockwise for consistent checks.
         static std::vector<Vec> getClockwiseVertices(const amp::Obstacle2D& obstacle) {
             std::vector<Vec> V = obstacle.verticesCW();
             if (V.size() < 3) return V;
@@ -70,7 +60,6 @@ namespace MotionPlanningHelpers {
             return V;
         }
 
-        // Helper to check if a point is inside a single convex polygon using the ray casting method.
         static bool isPointInsidePolygon(const Vec& point, const std::vector<Vec>& polygon_vertices) {
             bool inside = false;
             const size_t n = polygon_vertices.size();
@@ -84,7 +73,6 @@ namespace MotionPlanningHelpers {
             return inside;
         }
         
-        // Helper to check for intersection between two line segments.
         static bool checkSegmentIntersection(const Vec& p1, const Vec& q1, const Vec& p2, const Vec& q2) {
             const Vec r = q1 - p1;
             const Vec s = q2 - p2;
@@ -142,4 +130,4 @@ namespace MotionPlanningHelpers {
         }
     };
 
-} // namespace MotionPlanningHelpers
+} 
