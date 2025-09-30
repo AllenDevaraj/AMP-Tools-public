@@ -30,6 +30,8 @@ class MyPotentialFunction : public amp::PotentialFunction2D {
         }
 
 		virtual Eigen::Vector2d getGradient(const Eigen::Vector2d& q) const override {
-            return Eigen::Vector2d(q[0] * q[0],  q[1] * q[1]);
-        }
+    	// The gradient of U = x^2 + y^2 is [2x, 2y]
+    		return Eigen::Vector2d(2.0 * q[0], 2.0 * q[1]);
+		}	
+
 };
