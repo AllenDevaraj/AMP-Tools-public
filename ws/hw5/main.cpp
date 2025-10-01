@@ -10,111 +10,65 @@
 
 using namespace amp;
 
-int main(int argc, char** argv) {
-    /* Include this line to have different randomized environments every time you run your code (NOTE: this has no affect on grade()) */
-    amp::RNG::seed(amp::RNG::randiUnbounded());
-
-    // // Use WO1 from Exercise 2
-    // amp::Problem2D problem = HW2::getWorkspace1();
-
-    // // Use WO2 from Exercise 2
-    // amp::Problem2D problem = HW2::getWorkspace2();
-
-    // Test your gradient descent algorithm on a random problem.
-    double d_star = 10.0; // Goal influence distance
-    double zetta  = 1.0;  // Attractive gain
-    double Q_star = 1.5;  // Obstacle influence distance
-    double eta    = 5.0;  // Repulsive gain
-    MyGDAlgorithm algo(d_star, zetta, Q_star, eta);
-    Path2D path;
-    Problem2D prob;
-    bool success = HW5::generateAndCheck(algo, path, prob);
-    Visualizer::makeFigure(prob, path);
-
-    // Visualize your potential function
-    Visualizer::makeFigure(MyPotentialFunction{}, prob, 30);
-    Visualizer::saveFigures();
-    
-    // Arguments following argv correspond to the constructor arguments of MyGDAlgorithm:
-    HW5::grade<MyGDAlgorithm>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, algo);
-    return 0;
+// Helper function to easily create a square obstacle centered at a point
+amp::Obstacle2D createSquare(double centerX, double centerY, double side_length) {
+    double half_side = side_length / 2.0;
+    std::vector<Eigen::Vector2d> vertices;
+    vertices.push_back(Eigen::Vector2d(centerX - half_side, centerY - half_side));
+    vertices.push_back(Eigen::Vector2d(centerX + half_side, centerY - half_side));
+    vertices.push_back(Eigen::Vector2d(centerX + half_side, centerY + half_side));
+    vertices.push_back(Eigen::Vector2d(centerX - half_side, centerY + half_side));
+    return amp::Obstacle2D(vertices);
 }
 
-
-
-/*
-// This includes all of the necessary header files in the toolbox
-#include "AMPCore.h"
-
-// Include headers for both homework assignments
-#include "hw/HW5.h"
-#include "hw/HW2.h"
-
-// Include your custom HW5 algorithm
-#include "MyGDAlgorithm.h"
-
-using namespace amp;
-
 int main(int argc, char** argv) {
-    // Seed the random number generator
+    /* Include this line to have different randomized environments every time you run your code */
     amp::RNG::seed(amp::RNG::randiUnbounded());
 
     // ==================================================================
-    // ## Central Place to Define and Tune Algorithm Parameters        ##
+    // ## 1. Define the specific problem with two square obstacles     ##
     // ==================================================================
-    // Constructor is: MyGDAlgorithm(d_star, zetta, Q_star, eta)
+    Problem2D problem;
+    problem.q_init = Eigen::Vector2d(0.0, 0.0);
+    problem.q_goal = Eigen::Vector2d(10.0, 0.0);
+    problem.x_min = -2.0;
+    problem.x_max = 12.0;
+    problem.y_min = -5.0;
+    problem.y_max = 5.0;
+    problem.obstacles.push_back(createSquare(4.0, 1.0, 1.0));
+    problem.obstacles.push_back(createSquare(7.0, -1.0, 1.0));
+
+
+    // ==================================================================
+    // ## 2. Instantiate the algorithm and run it on the problem     ##
+    // ==================================================================
     double d_star = 10.0; // Goal influence distance
     double zetta  = 1.0;  // Attractive gain
     double Q_star = 1.5;  // Obstacle influence distance
     double eta    = 5.0;  // Repulsive gain
     MyGDAlgorithm algo(d_star, zetta, Q_star, eta);
 
+    // Run the planner on your manually created problem
+    Path2D path = algo.plan(problem);
+    Visualizer::makeFigure(problem, path);
 
-    // ==================================================================
-    // ## Section 1: Standard HW5 test on a random problem             ##
-    // ==================================================================
-    LOG("Running standard HW5 test on a random problem...");
-    {
-        Path2D random_path;
-        Problem2D random_prob;
-        bool success = HW5::generateAndCheck(algo, random_path, random_prob);
-        LOG("Random Problem Test | Valid: " << (success ? "Yes!" : "No :("));
-        
-        Visualizer::makeFigure(random_prob, random_path);
-        Visualizer::makeFigure(MyPotentialFunction{}, random_prob);
-    }
-    
 
+    /*
+    // The code for the random environment is now commented out:
     // ==================================================================
-    // ## Section 2: Benchmark tests on HW2 workspaces                 ##
-    // ==================================================================
-    LOG("Running benchmark on HW2 Workspaces...");
-    {
-        // Test on Workspace 1
-        amp::Problem2D problem1 = HW2::getWorkspace1();
-        amp::Path2D path1 = algo.plan(problem1);
-        bool success1 = HW2::check(path1, problem1);
-        LOG("HW2 Workspace 1 | Valid: " << (success1 ? "Yes!" : "No :("));
-        LOG("HW2 Workspace 1 | Length: " << path1.length());
-        Visualizer::makeFigure(problem1, path1);
-    }
-    {
-        // Test on Workspace 2
-        amp::Problem2D problem2 = HW2::getWorkspace2();
-        amp::Path2D path2 = algo.plan(problem2);
-        bool success2 = HW2::check(path2, problem2);
-        LOG("HW2 Workspace 2 | Valid: " << (success2 ? "Yes!" : "No :("));
-        LOG("HW2 Workspace 2 | Length: " << path2.length());
-        Visualizer::makeFigure(problem2, path2);
-    }
+    MyGDAlgorithm algo_rand(1.0, 1.0, 1.0, 1.0);
+    Path2D path_rand;
+    Problem2D prob_rand;
+    bool success = HW5::generateAndCheck(algo_rand, path_rand, prob_rand);
+    Visualizer::makeFigure(prob_rand, path_rand);
+    */
 
-    // ==================================================================
-    // ## Section 3: Save figures and run official grader              ##
-    // ==================================================================
-    Visualizer::saveFigures("hw5_combined_figs");
+    // Visualize your potential function on the two-square problem
+    Visualizer::makeFigure(MyPotentialFunction{}, problem, 30);
+    Visualizer::saveFigures();
     
-    // The grader uses its own random problems and passes your tuned parameters.
-    HW5::grade<MyGDAlgorithm>("nonhuman.biologic@myspace.edu", argc, argv, d_star, zetta, Q_star, eta);
-    
+    // NOTE: The grader will still run on its own set of random problems for the official test.
+    // The parameters you tuned above will be passed to it.
+    HW5::grade<MyGDAlgorithm>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, d_star, zetta, Q_star, eta);
     return 0;
-}*/
+}
