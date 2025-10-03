@@ -20,23 +20,16 @@ class MyGDAlgorithm : public amp::GDAlgorithm {
 		double d_star, zetta, Q_star, eta;
 };
 
-
-// ==================================================================
-// ## NEW CLASS: Represents the full Attractive + Repulsive field  ##
-// ==================================================================
 class MyCombinedPotential : public amp::PotentialFunction2D {
 public:
     MyCombinedPotential(const amp::Problem2D& problem, double d_star, double zetta, double Q_star, double eta)
         : m_problem(problem), d_star(d_star), zetta(zetta), Q_star(Q_star), eta(eta) {}
 
-    // We only need to implement the gradient for visualization
     virtual double operator()(const Eigen::Vector2d& q) const override {
-        // Calculating the true potential is complex, so we can return 0.0 as we only need the gradient.
         return 0.0;
     }
 
     virtual Eigen::Vector2d getGradient(const Eigen::Vector2d& q) const override {
-        // This is the same logic from your plan() method
         
         // Attractive Gradient
         Eigen::Vector2d grad_attractive;
