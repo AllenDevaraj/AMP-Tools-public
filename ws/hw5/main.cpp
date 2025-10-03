@@ -41,8 +41,8 @@ int main(int argc, char** argv) {
     double eta    = 0.1; // Repulsive gain 
     MyGDAlgorithm algo(d_star, zetta, Q_star, eta);
 
-    // // Option 2: HW2 Workspace 1 
-    // Problem2D problem = HW2::getWorkspace1();
+    // Option 2: HW2 Workspace 1 
+    Problem2D problem = HW2::getWorkspace1();
 
     // // Option 3: HW2 Workspace 2 
     // Problem2D problem = HW2::getWorkspace2();
@@ -54,7 +54,8 @@ int main(int argc, char** argv) {
     Visualizer::makeFigure(problem, path);
 
     // Visualize your potential function
-    Visualizer::makeFigure(MyPotentialFunction{}, problem, 30);
+    Visualizer::makeFigure(MyCombinedPotential(problem, d_star, zetta, Q_star, eta), problem, 50);
+    
     Visualizer::saveFigures();
     
     HW5::grade<MyGDAlgorithm>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, d_star, zetta, Q_star, eta);
