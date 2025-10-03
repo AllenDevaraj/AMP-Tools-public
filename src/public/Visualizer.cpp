@@ -448,8 +448,8 @@ void amp::Visualizer::createAxes(const PotentialFunction2D& potential_function, 
     Eigen::Vector2d upper_right(prob.x_max, prob.y_max);
     Eigen::Vector2d disc_diag = 1.0 / static_cast<double>(n_grid) * (upper_right - lower_left);
 
-    for (std::size_t i = 0; i < n_grid; ++i) {
-        for (std::size_t j = 0; j < n_grid; ++j) {
+    for (std::size_t j = 0; j < n_grid; ++j) {
+        for (std::size_t i = 0; i < n_grid; ++i) {
             Eigen::Vector2d coord = lower_left + Eigen::Vector2d(static_cast<double>(i) * disc_diag[0], static_cast<double>(j) * disc_diag[1]);
             double u = potential_function(coord);
             u = std::min(u, u_max); // Clamp below u_max

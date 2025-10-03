@@ -3,6 +3,40 @@
 #include <limits>
 #include "HelpfulClass.h"
 
+// Helper to find centroid
+Eigen::Vector2d getCentroid(const std::vector<Eigen::Vector2d>& vertices) {
+    if (vertices.empty()) {
+        return Eigen::Vector2d(0.0, 0.0);
+    }
+    
+    double signed_area = 0.0;
+    Eigen::Vector2d centroid(0.0, 0.0);
+    
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        const Eigen::Vector2d& p0 = vertices[i];
+        const Eigen::Vector2d& p1 = vertices[(i + 1) % vertices.size()];
+        
+        double cross_product = p0.x() * p1.y() - p1.x() * p0.y();
+        signed_area += cross_product;
+        centroid.x() += (p0.x() + p1.x()) * cross_product;
+        centroid.y() += (p0.y() + p1.y()) * cross_product;
+    }
+
+    if (std::abs(signed_area) < 1e-9) {
+        Eigen::Vector2d sum(0.0, 0.0);
+        for(const auto& v : vertices) {
+            sum += v;
+        }
+        return sum / vertices.size();
+    }
+    
+    signed_area *= 0.5;
+    centroid /= (6.0 * signed_area);
+    
+    return centroid;
+}
+
+
 amp::Path2D MyGDAlgorithm::plan(const amp::Problem2D& problem) {
     amp::Path2D path;
     path.waypoints.push_back(problem.q_init);
@@ -28,7 +62,7 @@ amp::Path2D MyGDAlgorithm::plan(const amp::Problem2D& problem) {
         // Repulsive Gradient
         Eigen::Vector2d grad_repulsive(0.0, 0.0);
         for (const amp::Obstacle2D& obstacle : problem.obstacles) {
-            Eigen::Vector2d closest_point_on_obstacle;
+            Eigen::Vector2d closest_point_on_obstacle; 
             double min_dist_sq = std::numeric_limits<double>::max();
             auto vertices = obstacle.verticesCCW();
             if (vertices.empty()) continue;
@@ -50,15 +84,29 @@ amp::Path2D MyGDAlgorithm::plan(const amp::Problem2D& problem) {
             double dist_to_obs = std::sqrt(min_dist_sq);
             
             if (dist_to_obs <= Q_star) {
-                Eigen::Vector2d grad_dist = (q_current - closest_point_on_obstacle).normalized();
+                // Find centroid
+                Eigen::Vector2d centroid = getCentroid(vertices);
+                // Distance between centroid and point
+                Eigen::Vector2d grad_dist = (closest_point_on_obstacle - centroid).normalized();
                 grad_repulsive += eta * (1.0 / Q_star - 1.0 / dist_to_obs) * (1.0 / (dist_to_obs * dist_to_obs)) * grad_dist;
             }
         }
 
-        // Take a Step
+        // Local minma check
         Eigen::Vector2d total_force = -grad_attractive - grad_repulsive;
-        if (total_force.norm() < 1e-6) break;
-        Eigen::Vector2d q_next = q_current + step_size * total_force.normalized();
+        Eigen::Vector2d q_next;
+
+        if (total_force.norm() < 1e-2) {
+            if (grad_repulsive.norm() > 1e-6) {
+                Eigen::Vector2d repulsive_dir = grad_repulsive.normalized();
+                Eigen::Vector2d nudge_dir(-repulsive_dir.y(), repulsive_dir.x());
+                q_next = q_current + step_size * nudge_dir;
+            } else {
+                break;
+            }
+        } else {
+            q_next = q_current + step_size * total_force.normalized();
+        }
 
         // Safety Check
         if (MotionPlanningHelpers::CollisionChecker::isPointInCollision(q_next, problem.obstacles)) {

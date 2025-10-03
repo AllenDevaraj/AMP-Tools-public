@@ -21,32 +21,31 @@ amp::Obstacle2D createSquare(double centerX, double centerY, double side_length)
 }
 
 int main(int argc, char** argv) {
-    /* Include this line to have different randomized environments every time you run your code */
     amp::RNG::seed(amp::RNG::randiUnbounded());
 
-    // // Hw5 workspace
-    // Problem2D problem;
-    // problem.q_init = Eigen::Vector2d(0.0, 0.0);
-    // problem.q_goal = Eigen::Vector2d(10.0, 0.0);
-    // problem.x_min = -2.0;
-    // problem.x_max = 12.0;
-    // problem.y_min = -5.0;
-    // problem.y_max = 5.0;
-    // problem.obstacles.push_back(createSquare(4.0, 1.0, 1.0));
-    // problem.obstacles.push_back(createSquare(7.0, -1.0, 1.0));
+    // Hw5 workspace
+    Problem2D problem;
+    problem.q_init = Eigen::Vector2d(0.0, 0.0);
+    problem.q_goal = Eigen::Vector2d(10.0, 0.0);
+    problem.x_min = -2.0;
+    problem.x_max = 12.0;
+    problem.y_min = -5.0;
+    problem.y_max = 5.0;
+    problem.obstacles.push_back(createSquare(4.0, 1.0, 1.0));
+    problem.obstacles.push_back(createSquare(7.0, -1.0, 1.0));
 
     // Random
     double d_star = 5.0; // Goal influence distance
     double zetta  = 20.0;  // Attractive gain
     double Q_star = 1;  // Obstacle influence distance
-    double eta    = 0.1; // Repulsive gain (increased for better obstacle avoidance)
+    double eta    = 0.1; // Repulsive gain 
     MyGDAlgorithm algo(d_star, zetta, Q_star, eta);
 
-    // // Option 2: HW2 Workspace 1 (Uncomment the line below to use)
+    // // Option 2: HW2 Workspace 1 
     // Problem2D problem = HW2::getWorkspace1();
 
-    // Option 3: HW2 Workspace 2 (Uncomment the line below to use)
-    Problem2D problem = HW2::getWorkspace2();
+    // // Option 3: HW2 Workspace 2 
+    // Problem2D problem = HW2::getWorkspace2();
 
     // Run the planner on your chosen problem
     Path2D path = algo.plan(problem);
@@ -58,7 +57,6 @@ int main(int argc, char** argv) {
     Visualizer::makeFigure(MyPotentialFunction{}, problem, 30);
     Visualizer::saveFigures();
     
-    // NOTE: The grader will still run on its own set of random problems for the official test.
     HW5::grade<MyGDAlgorithm>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, d_star, zetta, Q_star, eta);
     return 0;
 }
