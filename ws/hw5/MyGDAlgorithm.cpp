@@ -10,7 +10,7 @@ amp::Path2D MyGDAlgorithm::plan(const amp::Problem2D& problem) {
     // Algorithm parameters
     const double step_size = 0.1;
     const double goal_tolerance = 0.25; // Matches the exercise's epsilon
-    const int max_iterations = 40000;
+    const int max_iterations = 50000;
     
     Eigen::Vector2d q_current = problem.q_init;
     int current_iteration = 0;
