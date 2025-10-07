@@ -7,7 +7,6 @@ MyAStarAlgo::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProble
     result.node_path.push_back(problem.init_node);
     result.node_path.push_back(problem.goal_node);
     result.path_cost += 1.0;
-
     result.print();
     return result;
 }
