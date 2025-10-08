@@ -18,6 +18,7 @@ struct NodeInfo {
     }
 };
 
+
 // Implement the search method for the A* algorithm
 amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem& problem, const amp::SearchHeuristic& heuristic) {
     // FIX 1: The problem graph is a shared_ptr, not a unique_ptr.
