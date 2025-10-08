@@ -66,14 +66,13 @@ int main(int argc, char** argv) {
     }
     std::cout << "===========================\n" << std::endl;
     
-    // For Exercise 3, you will need to implement the A* algorithm.
-    /*
+    // ========== EXERCISE 3: A* Algorithm ==========
+    std::cout << "\n=== [EX3] A* Search Results ===" << std::endl;
     ShortestPathProblem problem = HW6::getEx3SPP();
     LookupSearchHeuristic heuristic = HW6::getEx3Heuristic();
     MyAStarAlgo algo;
     MyAStarAlgo::GraphSearchResult result = algo.search(problem, heuristic);
-    */
-
+    std::cout << "===============================\n" << std::endl;
     // Save all generated figures
     Visualizer::saveFigures();
     
