@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     // ========== EXERCISE 1: Wave-front algorithm ==========
     
     // Get the problem from HW2 Exercise 2
-    Problem2D point_problem = HW2::getWorkspace2();
+    Problem2D point_problem = HW2::getWorkspace1();
 
     // Set grid size. For 0.25 cells in a 10x10 workspace, we need 10/0.25 = 40 cells.
     std::size_t n_cells = 40;
@@ -24,14 +24,8 @@ int main(int argc, char** argv) {
     // Construct point-agent cspace instance and wavefront algorithm
     std::shared_ptr<MyPointAgentCSConstructor> point_agent_ctor = std::make_shared<MyPointAgentCSConstructor>(n_cells);
     std::shared_ptr<WaveFrontAlgorithm> wf_algo = std::make_shared<MyWaveFrontAlgorithm>();
-    
-    // Combine your wavefront planner with a cspace object
     PointWaveFrontAlgorithm point_algo(wf_algo, point_agent_ctor);
-
-    // Plan and get a path for the point-agent
     Path2D path = point_algo.plan(point_problem);
-    
-    // Visualize path in workspace and cspace
     Visualizer::makeFigure(point_problem, path);
     Visualizer::makeFigure(*point_algo.getCSpace(), path);
 
@@ -60,11 +54,7 @@ int main(int argc, char** argv) {
     std::size_t manip_n_cells = 100; // Using a finer grid for C-space
     std::shared_ptr<MyManipulatorCSConstructor> manipulator_ctor = std::make_shared<MyManipulatorCSConstructor>(manip_n_cells);
     ManipulatorWaveFrontAlgorithm manip_algo(wf_algo, manipulator_ctor);
-
-    // Plan the manipulator trajectory
     ManipulatorTrajectory2Link trajectory = manip_algo.plan(manipulator, manip_problem);
-    
-    // Visualize the results as required
     Visualizer::makeFigure(manip_problem, manipulator, trajectory); // Workspace snapshots
     Visualizer::makeFigure(*manip_algo.getCSpace(), trajectory);   // C-space path
 
@@ -87,6 +77,6 @@ int main(int argc, char** argv) {
     // Save all generated figures
     Visualizer::saveFigures();
     
-    amp::HW6::grade<PointWaveFrontAlgorithm, ManipulatorWaveFrontAlgorithm, MyAStarAlgo>("yusif.razzaq@colorado.edu", argc, argv, std::make_tuple(wf_algo, point_agent_ctor), std::make_tuple(wf_algo, manipulator_ctor), std::make_tuple());
+    amp::HW6::grade<PointWaveFrontAlgorithm, ManipulatorWaveFrontAlgorithm, MyAStarAlgo>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, std::make_tuple(wf_algo, point_agent_ctor), std::make_tuple(wf_algo, manipulator_ctor), std::make_tuple());
     return 0;
 }
