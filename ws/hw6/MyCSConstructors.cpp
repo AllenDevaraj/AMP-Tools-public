@@ -42,7 +42,7 @@ MyPointAgentCSConstructor::construct(const amp::Environment2D& env) {
 
     std::cout << "Constructing C-space for point agent (cell=0.25, 4-connected)\n";
 
-    // Collision check
+    // Center-point collision
     for (std::size_t ix = 0; ix < nx; ++ix) {
         for (std::size_t iy = 0; iy < ny; ++iy) {
             const Eigen::Vector2d center = cspace.cellCenter(ix, iy);
@@ -51,7 +51,6 @@ MyPointAgentCSConstructor::construct(const amp::Environment2D& env) {
             cspace(ix, iy) = occupied; 
         }
     }
-
     return cspace_ptr;
 }
 
@@ -59,32 +58,31 @@ std::unique_ptr<amp::GridCSpace2D>
 MyManipulatorCSConstructor::construct(const amp::LinkManipulator2D& manipulator,
                                       const amp::Environment2D& env) {
     const double theta_min = -M_PI;
-    const double theta_max = M_PI;
+    const double theta_max =  M_PI;
 
-    // C-space grid for the joint angles
     auto cspace_ptr = std::make_unique<MyGridCSpace2D>(
         m_cells_per_dim, m_cells_per_dim,
         theta_min, theta_max,
         theta_min, theta_max);
     MyGridCSpace2D& cspace = *cspace_ptr;
 
-    std::cout << "Constructing C-space for 2-link manipulator...\n";
+    std::cout << "Constructing C-space for 2-link manipulator (wrap-around angles)\n";
 
-    // Iterate through each cell 
     for (std::size_t ix = 0; ix < m_cells_per_dim; ++ix) {
         for (std::size_t iy = 0; iy < m_cells_per_dim; ++iy) {
-            // Get the configuration (q1, q2) for the center 
-            Eigen::Vector2d q_center_vec = cspace.cellCenter(ix, iy);
-            amp::ManipulatorState q_center(manipulator.nLinks());
-            q_center << q_center_vec.x(), q_center_vec.y();
+            // Joint-angle center (q1, q2)
+            const Eigen::Vector2d q_center = cspace.cellCenter(ix, iy);
+
+            amp::ManipulatorState q(manipulator.nLinks());
+            q << q_center.x(), q_center.y();
 
             // FK
-            Eigen::Vector2d base_pos  = manipulator.getJointLocation(q_center, 0); // Base of link 1
-            Eigen::Vector2d joint_pos = manipulator.getJointLocation(q_center, 1); // Joint
-            Eigen::Vector2d ee_pos    = manipulator.getJointLocation(q_center, 2); // End-effector 
+            const Eigen::Vector2d base     = manipulator.getJointLocation(q, 0);
+            const Eigen::Vector2d joint    = manipulator.getJointLocation(q, 1);
+            const Eigen::Vector2d endeff   = manipulator.getJointLocation(q, 2);
 
-            bool link1_collides = CollisionChecker::isSegmentInCollision(base_pos, joint_pos, env.obstacles);
-            bool link2_collides = CollisionChecker::isSegmentInCollision(joint_pos, ee_pos, env.obstacles);
+            const bool link1_collides = CollisionChecker::isSegmentInCollision(base,  joint,  env.obstacles);
+            const bool link2_collides = CollisionChecker::isSegmentInCollision(joint, endeff, env.obstacles);
 
             cspace(ix, iy) = link1_collides || link2_collides;
         }
@@ -95,14 +93,13 @@ MyManipulatorCSConstructor::construct(const amp::LinkManipulator2D& manipulator,
 amp::Path2D MyWaveFrontAlgorithm::planInCSpace(const Eigen::Vector2d& q_init,
                                                const Eigen::Vector2d& q_goal,
                                                const amp::GridCSpace2D& grid_cspace,
-                                               bool /*isManipulator*/) {
+                                               bool isManipulator) {
     const auto* mygrid = dynamic_cast<const MyGridCSpace2D*>(&grid_cspace);
     if (!mygrid) return amp::Path2D{};
 
     const std::size_t NX = mygrid->width();
     const std::size_t NY = mygrid->height();
 
-    // Map start/goal to cells
     auto [sx, sy] = mygrid->getCellFromPoint(q_init.x(), q_init.y());
     auto [gx, gy] = mygrid->getCellFromPoint(q_goal.x(), q_goal.y());
 
@@ -113,7 +110,6 @@ amp::Path2D MyWaveFrontAlgorithm::planInCSpace(const Eigen::Vector2d& q_init,
         return amp::Path2D{}; 
     }
 
-    // 4-neighbor BFS from goal to compute distances
     const int INF = std::numeric_limits<int>::max();
     std::vector<int> dist(NX * NY, INF);
     std::vector<std::pair<int,int>> parent(NX * NY, {-1, -1});
@@ -136,13 +132,25 @@ amp::Path2D MyWaveFrontAlgorithm::planInCSpace(const Eigen::Vector2d& q_init,
     while (!q.empty()) {
         auto [cx, cy] = q.front(); q.pop();
         const int cd = dist[idx(cx, cy)];
+
         for (int k = 0; k < 4; ++k) {
             int nx_ = static_cast<int>(cx) + DX[k];
             int ny_ = static_cast<int>(cy) + DY[k];
-            if (!in_bounds(nx_, ny_)) continue;
+
+            if (isManipulator) {
+                if (nx_ < 0) nx_ += static_cast<int>(NX);
+                if (ny_ < 0) ny_ += static_cast<int>(NY);
+                if (nx_ >= static_cast<int>(NX)) nx_ -= static_cast<int>(NX);
+                if (ny_ >= static_cast<int>(NY)) ny_ -= static_cast<int>(NY);
+            } else {
+                if (!in_bounds(nx_, ny_)) continue;
+            }
+
             const std::size_t nix = static_cast<std::size_t>(nx_);
             const std::size_t niy = static_cast<std::size_t>(ny_);
+            if (!isManipulator && !in_bounds(nx_, ny_)) continue;
             if (is_blocked(nix, niy)) continue;
+
             std::size_t nidx = idx(nix, niy);
             if (dist[nidx] == INF) {
                 dist[nidx] = cd + 1;
@@ -151,6 +159,7 @@ amp::Path2D MyWaveFrontAlgorithm::planInCSpace(const Eigen::Vector2d& q_init,
             }
         }
     }
+
 
     std::vector<std::pair<std::size_t,std::size_t>> cells;
     {
@@ -170,9 +179,22 @@ amp::Path2D MyWaveFrontAlgorithm::planInCSpace(const Eigen::Vector2d& q_init,
     for (auto [ix, iy] : cells) {
         pts.emplace_back(mygrid->cellCenter(ix, iy));
     }
+
+    // Endpoints:
     if (!pts.empty()) {
         pts.front() = q_init;
         pts.back()  = q_goal;
+    }
+
+    if (isManipulator) {
+        const double TWO_PI = 2.0 * M_PI;
+        for (std::size_t i = 1; i < pts.size(); ++i) {
+            for (int j = 0; j < 2; ++j) {
+                double d = pts[i][j] - pts[i-1][j];
+                if (d >  M_PI) pts[i][j] -= TWO_PI;
+                if (d < -M_PI) pts[i][j] += TWO_PI;
+            }
+        }
     }
 
     amp::Path2D path;
