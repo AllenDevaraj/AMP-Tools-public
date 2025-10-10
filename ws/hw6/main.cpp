@@ -34,8 +34,8 @@ int main(int argc, char** argv) {
     std::shared_ptr<WaveFrontAlgorithm> wf_algo = std::make_shared<MyWaveFrontAlgorithm>();
     PointWaveFrontAlgorithm point_algo(wf_algo, point_agent_ctor);
     Path2D path = point_algo.plan(point_problem);
-    Visualizer::makeFigure(point_problem, path);
-    Visualizer::makeFigure(*point_algo.getCSpace(), path);
+    // Visualizer::makeFigure(point_problem, path);
+    // Visualizer::makeFigure(*point_algo.getCSpace(), path);
 
     // Calculate and print path length
     double path_length = path.length();
@@ -58,8 +58,8 @@ int main(int argc, char** argv) {
     ManipulatorWaveFrontAlgorithm manip_algo(wf_algo, manipulator_ctor);
     
     ManipulatorTrajectory2Link trajectory = manip_algo.plan(manipulator, manip_problem);
-    Visualizer::makeFigure(manip_problem, manipulator, trajectory); 
-    Visualizer::makeFigure(*manip_algo.getCSpace(), trajectory);   
+    // Visualizer::makeFigure(manip_problem, manipulator, trajectory); 
+    // Visualizer::makeFigure(*manip_algo.getCSpace(), trajectory);   
 
     std::cout << "\nEx: 2" << std::endl;
     if (trajectory.waypoints.empty()) {
@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
     DijkstraHeuristic heuristic_dijkstra;
     MyAStarAlgo::GraphSearchResult result_dijkstra = algo.search(problem, heuristic_dijkstra);
     
-    Visualizer::saveFigures();
+    // Visualizer::saveFigures();
     
     amp::HW6::grade<PointWaveFrontAlgorithm, ManipulatorWaveFrontAlgorithm, MyAStarAlgo>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, std::make_tuple(wf_algo, point_agent_ctor), std::make_tuple(wf_algo, manipulator_ctor), std::make_tuple());
     return 0;
