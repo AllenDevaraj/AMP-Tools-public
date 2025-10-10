@@ -51,12 +51,12 @@ int main(int argc, char** argv) {
     Path2D path = algo.plan(problem);
     LOG("Path length: " << path.length()); 
     // bool success = HW5::generateAndCheck(algo, path, problem);
-    Visualizer::makeFigure(problem, path);
+    // Visualizer::makeFigure(problem, path);
 
     // Visualize your potential function
-    Visualizer::makeFigure(MyCombinedPotential(problem, d_star, zetta, Q_star, eta), problem, 50);
+    // Visualizer::makeFigure(MyCombinedPotential(problem, d_star, zetta, Q_star, eta), problem, 50);
     
-    Visualizer::saveFigures();
+    // Visualizer::saveFigures();
     
     HW5::grade<MyGDAlgorithm>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, d_star, zetta, Q_star, eta);
     return 0;
