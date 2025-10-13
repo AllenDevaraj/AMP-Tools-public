@@ -1,37 +1,70 @@
-// This includes all of the necessary header files in the toolbox
 #include "AMPCore.h"
 #include "hw/HW2.h"
 #include "hw/HW5.h"
 #include "MySamplingBasedPlanners.h"
+#include <iostream>
 
 using namespace amp;
 
+// Helper function to create the square obstacles for HW5
+// FIXED: This now creates a vector of vertices first, then passes it
+// to the Obstacle2D constructor, which is the correct public interface.
+Obstacle2D createSquare(double x, double y, double size) {
+    std::vector<Eigen::Vector2d> vertices;
+    vertices.push_back(Eigen::Vector2d(x - size / 2, y - size / 2));
+    vertices.push_back(Eigen::Vector2d(x + size / 2, y - size / 2));
+    vertices.push_back(Eigen::Vector2d(x + size / 2, y + size / 2));
+    vertices.push_back(Eigen::Vector2d(x - size / 2, y + size / 2));
+    return Obstacle2D(vertices);
+}
+
 int main(int argc, char** argv) {
-    HW7::hint(); // Consider implementing an N-dimensional planner 
+    // =========================================================
+    // Part (a): Solve HW5 Workspace with PRM
+    // =========================================================
+    Problem2D problem_hw5;
+    problem_hw5.q_init = Eigen::Vector2d(0.0, 0.0);
+    problem_hw5.q_goal = Eigen::Vector2d(10.0, 0.0);
+    problem_hw5.x_min = -1.0;
+    problem_hw5.x_max = 11.0;
+    problem_hw5.y_min = -3.0;
+    problem_hw5.y_max = 3.0;
+    problem_hw5.obstacles.push_back(createSquare(4.0, 1.0, 1.0));
+    problem_hw5.obstacles.push_back(createSquare(7.0, -1.0, 1.0));
 
-    // Example of creating a graph and adding nodes for visualization
-    std::shared_ptr<amp::Graph<double>> graphPtr = std::make_shared<amp::Graph<double>>();
-    std::map<amp::Node, Eigen::Vector2d> nodes;
+    std::cout << "Solving HW5 Problem..." << std::endl;
+    // (a).i: Plot roadmap and path for n=200, r=1
+    MyPRM prm_hw5(200, 1.0, false); // n=200, r=1, no smoothing
+    Path2D path_hw5 = prm_hw5.plan(problem_hw5);
+    Visualizer::makeFigure(problem_hw5, path_hw5, *prm_hw5.roadmap, prm_hw5.node_locations);
+
+    // (a).iv: Re-evaluate with path smoothing
+    MyPRM prm_hw5_smooth(200, 1.0, true); // n=200, r=1, with smoothing
+    Path2D smoothed_path_hw5 = prm_hw5_smooth.plan(problem_hw5);
+    Visualizer::makeFigure(problem_hw5, smoothed_path_hw5);
+
+    // =========================================================
+    // Part (b): Solve HW2 Workspaces with PRM
+    // =========================================================
+    Problem2D problem_w1 = HW2::getWorkspace1();
     
-    std::vector<Eigen::Vector2d> points = {{3, 3}, {4, 5}, {5, 3}, {6, 5}, {5, 7}, {7, 3}}; // Points to add to the graph
-    for (amp::Node i = 0; i < points.size(); ++i) nodes[i] = points[i]; // Add point-index pair to the map
-    std::vector<std::tuple<amp::Node, amp::Node, double>> edges = {{0, 4, 1}, {0, 5, 1}, {4, 5, 1}, {1, 2, 1}, {1, 3, 1}, {2, 3, 1}}; // Edges to connect
-    for (const auto& [from, to, weight] : edges) graphPtr->connect(from, to, weight); // Connect the edges in the graph
-    graphPtr->print();
+    std::cout << "\nSolving HW2 Workspace 1..." << std::endl;
+    // (b).i: Plot roadmap and path for n=200, r=2
+    MyPRM prm_w1(200, 2.0, false); // n=200, r=2, no smoothing
+    Path2D path_w1 = prm_w1.plan(problem_w1);
+    Visualizer::makeFigure(problem_w1, path_w1, *prm_w1.roadmap, prm_w1.node_locations);
 
-    // Test PRM on Workspace1 of HW2
-    Problem2D problem = HW2::getWorkspace1();
-    MyPRM prm;
-    Visualizer::makeFigure(problem, prm.plan(problem), *graphPtr, nodes);
+    // (b).iv: Re-evaluate with path smoothing
+    MyPRM prm_w1_smooth(200, 2.0, true); // n=200, r=2, with smoothing
+    Path2D smoothed_path_w1 = prm_w1_smooth.plan(problem_w1);
+    Visualizer::makeFigure(problem_w1, smoothed_path_w1);
 
-    // Generate a random problem and test RRT
-    MyRRT rrt;
-    Path2D path;
-    HW7::generateAndCheck(rrt, path, problem);
-    Visualizer::makeFigure(problem, path, *graphPtr, nodes);
+    // FIXED: Replaced showFigures() and setFigureTitle() with the correct function
+    // from your toolbox, which saves/shows all figures at once.
     Visualizer::saveFigures();
 
-    // Grade method
-    HW7::grade<MyPRM, MyRRT>("firstName.lastName@colorado.edu", argc, argv, std::make_tuple(), std::make_tuple());
+    // Grade method (can be commented out during development)
+    HW7::grade<MyPRM, MyRRT>("your.email@colorado.edu", argc, argv);
+
     return 0;
 }
