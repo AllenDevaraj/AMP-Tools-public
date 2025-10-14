@@ -33,6 +33,21 @@ int main(int argc, char** argv) {
     problem_hw5.obstacles.push_back(createSquare(7.0, -1.0, 1.0));
 
     std::cout << "Solving HW5 Problem..." << std::endl;
+    std::cout << "Solving HW5 Problem..." << std::endl;
+    std::cout.flush();
+    
+    // (a).i: Plot roadmap and path for n=200, r=1
+    try {
+        MyPRM prm_hw5(200, 1.0, false); // n=200, r=1, no smoothing
+        std::cout << "Created PRM object, calling plan()..." << std::endl;
+        std::cout.flush();
+        Path2D path_hw5 = prm_hw5.plan(problem_hw5);
+        std::cout << "Plan returned, visualizing..." << std::endl;
+        std::cout.flush();
+        // Visualizer::makeFigure(problem_hw5, path_hw5, *prm_hw5.roadmap, prm_hw5.node_locations);
+    } catch (const std::exception& e) {
+        std::cout << "EXCEPTION in PRM: " << e.what() << std::endl;
+    }
     // (a).i: Plot roadmap and path for n=200, r=1
     MyPRM prm_hw5(200, 1.0, false); // n=200, r=1, no smoothing
     Path2D path_hw5 = prm_hw5.plan(problem_hw5);
