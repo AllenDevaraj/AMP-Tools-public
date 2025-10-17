@@ -12,17 +12,7 @@
 
 using namespace amp;
 
-// Helper function to calculate path length
-double calculatePathLength(const amp::Path2D& path) {
-    if (path.waypoints.size() < 2) {
-        return 0.0;
-    }
-    double length = 0.0;
-    for (size_t i = 1; i < path.waypoints.size(); ++i) {
-        length += (path.waypoints[i] - path.waypoints[i-1]).norm();
-    }
-    return length;
-}
+// The custom calculatePathLength function has been removed.
 
 // Helper function to create square obstacles
 Obstacle2D createSquare(double x, double y, double size) {
@@ -83,7 +73,8 @@ BenchmarkResult runBenchmark(const Problem2D& problem, int n, double r, bool smo
         
         if (!path.waypoints.empty()) {
             result.successes++;
-            result.path_lengths.push_back(calculatePathLength(path));
+            // MODIFICATION: Using path.length()
+            result.path_lengths.push_back(path.length()); 
             result.computation_times.push_back(time_ms);
         }
     }
@@ -205,7 +196,8 @@ int main(int argc, char** argv) {
     MyPRM prm_hw5(200, 1.0, false);
     Path2D path_hw5 = prm_hw5.plan(problem_hw5);
     if (!path_hw5.waypoints.empty()) {
-        std::cout << "HW5 (n=200, r=1.0) Path Length: " << calculatePathLength(path_hw5) << std::endl;
+        // MODIFICATION: Using path.length()
+        std::cout << "HW5 (n=200, r=1.0) Path Length: " << path_hw5.length() << std::endl;
         Visualizer::makeFigure(problem_hw5, path_hw5, *prm_hw5.roadmap, prm_hw5.node_locations);
     }
     
@@ -232,7 +224,8 @@ int main(int argc, char** argv) {
     MyPRM prm_hw5_smooth(200, 1.0, true);
     Path2D smoothed_path_hw5 = prm_hw5_smooth.plan(problem_hw5);
     if (!smoothed_path_hw5.waypoints.empty()) {
-        std::cout << "HW5 Smoothed (n=200, r=1.0) Path Length: " << calculatePathLength(smoothed_path_hw5) << std::endl;
+        // MODIFICATION: Using path.length()
+        std::cout << "HW5 Smoothed (n=200, r=1.0) Path Length: " << smoothed_path_hw5.length() << std::endl;
         Visualizer::makeFigure(problem_hw5, smoothed_path_hw5);
     }
 
@@ -253,7 +246,8 @@ int main(int argc, char** argv) {
     MyPRM prm_w1(200, 2.0, false);
     Path2D path_w1 = prm_w1.plan(problem_w1);
     if (!path_w1.waypoints.empty()) {
-        std::cout << "HW2 W1 (n=200, r=2.0) Path Length: " << calculatePathLength(path_w1) << std::endl;
+        // MODIFICATION: Using path.length()
+        std::cout << "HW2 W1 (n=200, r=2.0) Path Length: " << path_w1.length() << std::endl;
         Visualizer::makeFigure(problem_w1, path_w1, *prm_w1.roadmap, prm_w1.node_locations);
     }
     
@@ -261,7 +255,8 @@ int main(int argc, char** argv) {
     MyPRM prm_w2(500, 2.0, false);
     Path2D path_w2 = prm_w2.plan(problem_w2);
     if (!path_w2.waypoints.empty()) {
-        std::cout << "HW2 W2 (n=500, r=2.0) Path Length: " << calculatePathLength(path_w2) << std::endl;
+        // MODIFICATION: Using path.length()
+        std::cout << "HW2 W2 (n=500, r=2.0) Path Length: " << path_w2.length() << std::endl;
         Visualizer::makeFigure(problem_w2, path_w2, *prm_w2.roadmap, prm_w2.node_locations);
     } else {
         std::cout << "Failed to find a path for W2 visualization." << std::endl;
@@ -302,14 +297,16 @@ int main(int argc, char** argv) {
     MyPRM prm_w1_smooth(200, 2.0, true);
     Path2D smoothed_path_w1 = prm_w1_smooth.plan(problem_w1);
     if (!smoothed_path_w1.waypoints.empty()) {
-        std::cout << "W1 Smoothed (n=200, r=2.0) Path Length: " << calculatePathLength(smoothed_path_w1) << std::endl;
+        // MODIFICATION: Using path.length()
+        std::cout << "W1 Smoothed (n=200, r=2.0) Path Length: " << smoothed_path_w1.length() << std::endl;
         Visualizer::makeFigure(problem_w1, smoothed_path_w1);
     }
     
     MyPRM prm_w2_smooth(500, 2.0, true);
     Path2D smoothed_path_w2 = prm_w2_smooth.plan(problem_w2);
     if (!smoothed_path_w2.waypoints.empty()) {
-        std::cout << "W2 Smoothed (n=500, r=2.0) Path Length: " << calculatePathLength(smoothed_path_w2) << std::endl;
+        // MODIFICATION: Using path.length()
+        std::cout << "W2 Smoothed (n=500, r=2.0) Path Length: " << smoothed_path_w2.length() << std::endl;
         Visualizer::makeFigure(problem_w2, smoothed_path_w2);
     }
     
