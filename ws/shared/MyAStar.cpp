@@ -59,10 +59,11 @@ amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem
             result.path_cost = g_score[goal_node];
             result.node_path = path_list;
             
-            std::cout << "A* search completed." << std::endl;
-            std::cout << "  - Iterations: " << iterations << std::endl;
-            std::cout << "  - Path Cost: " << result.path_cost << std::endl;
-            std::cout << "  - Path: ";
+            
+            // std::cout << "A* search completed." << std::endl;
+            // std::cout << "  - Iterations: " << iterations << std::endl;
+            // std::cout << "  - Path Cost: " << result.path_cost << std::endl;
+            // std::cout << "  - Path: ";
             bool first = true;
             for (const auto& node : result.node_path) {
                 if (!first) {

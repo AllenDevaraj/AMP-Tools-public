@@ -1,10 +1,11 @@
 #include "MySamplingBasedPlanners.h"
 #include <random>
 #include <vector>
-
-// Implement your PRM algorithm
+#include <limits>
+#include <algorithm> 
+// ============================================================================
+// PRM Implementation
 amp::Path2D MyPRM::plan(const amp::Problem2D& problem) {
-    // Initialize roadmap and node locations
     roadmap = std::make_shared<amp::Graph<double>>();
     node_locations.clear();
 
@@ -83,10 +84,123 @@ amp::Path2D MyPRM::plan(const amp::Problem2D& problem) {
     return path;
 }
 
-// Implement your RRT algorithm here
+// RRT Implementation
+amp::Node MyRRT::findNearestNode(const Eigen::Vector2d& q_rand) {
+    amp::Node nearest_node = 0;
+    double min_distance = std::numeric_limits<double>::max();
+    
+    for (const auto& [node, position] : node_locations) {
+        double distance = (position - q_rand).norm();
+        if (distance < min_distance) {
+            min_distance = distance;
+            nearest_node = node;
+        }
+    }
+    
+    return nearest_node;
+}
+
+Eigen::Vector2d MyRRT::steer(const Eigen::Vector2d& q_near, const Eigen::Vector2d& q_rand) {
+    Eigen::Vector2d direction = q_rand - q_near;
+    double distance = direction.norm();
+    
+    if (distance <= step_size_) {
+        return q_rand;
+    } else {
+        return q_near + (direction / distance) * step_size_;
+    }
+}
+
 amp::Path2D MyRRT::plan(const amp::Problem2D& problem) {
+    tree = std::make_shared<amp::Graph<double>>();
+    node_locations.clear();
+    
+    amp::Node root_node = 0;
+    node_locations[root_node] = problem.q_init;
+    amp::Node node_counter = 1;
+    
+    amp::Node goal_node = -1;
+    
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> x_dist(problem.x_min, problem.x_max);
+    std::uniform_real_distribution<> y_dist(problem.y_min, problem.y_max);
+    std::uniform_real_distribution<> prob_dist(0.0, 1.0);
+    
+    for (int iteration = 0; iteration < max_iterations_; ++iteration) {
+        Eigen::Vector2d q_rand;
+        if (prob_dist(gen) < goal_bias_) {
+            q_rand = problem.q_goal;
+        } else {
+            q_rand = Eigen::Vector2d(x_dist(gen), y_dist(gen));
+        }
+        
+        amp::Node nearest_node = findNearestNode(q_rand);
+        Eigen::Vector2d q_near = node_locations[nearest_node];
+        
+        Eigen::Vector2d q_new = steer(q_near, q_rand);
+        
+        if (MotionPlanningHelpers::CollisionChecker::isPointInCollision(q_new, problem.obstacles)) {
+            continue;
+        }
+        
+        if (MotionPlanningHelpers::CollisionChecker::isSegmentInCollision(q_near, q_new, problem.obstacles)) {
+            continue;
+        }
+        
+        amp::Node new_node = node_counter++;
+        node_locations[new_node] = q_new;
+        
+        double edge_distance = (q_new - q_near).norm();
+        tree->connect(nearest_node, new_node, edge_distance);
+        
+        double distance_to_goal = (q_new - problem.q_goal).norm();
+        if (distance_to_goal <= epsilon_) {
+            goal_node = new_node;
+            break;
+        }
+    }
+    
     amp::Path2D path;
-    path.waypoints.push_back(problem.q_init);
-    path.waypoints.push_back(problem.q_goal);
+    if (goal_node == -1) {
+        return path;
+    }
+    
+    std::vector<amp::Node> path_nodes;
+    amp::Node current_node = goal_node;
+    
+    while (true) {
+        path_nodes.push_back(current_node);
+        
+        if (current_node == root_node) {
+            break;
+        }
+        
+        bool found_parent = false;
+        for (const auto& [node, position] : node_locations) {
+            const auto& children = tree->children(node);
+
+            if (std::find(children.begin(), children.end(), current_node) != children.end()) {
+                current_node = node; // We found the parent
+                found_parent = true;
+                break;
+            }
+        }
+        
+        if (!found_parent) {
+            return amp::Path2D();
+        }
+    }
+    
+    std::reverse(path_nodes.begin(), path_nodes.end());
+    
+    for (amp::Node node : path_nodes) {
+        path.waypoints.push_back(node_locations[node]);
+    }
+    
+    if ((path.waypoints.back() - problem.q_goal).norm() > 1e-6) {
+        path.waypoints.push_back(problem.q_goal);
+    }
+    
     return path;
 }
