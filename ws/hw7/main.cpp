@@ -6,8 +6,9 @@
 #include <vector>
 #include <chrono>
 #include <fstream>
-#include <iomanip> // Required for std::setprecision
-#include <sstream> // Required for std::stringstream
+#include <iomanip>
+#include <sstream>
+#include <map>
 
 using namespace amp;
 
@@ -93,18 +94,94 @@ BenchmarkResult runBenchmark(const Problem2D& problem, int n, double r, bool smo
     return result;
 }
 
-// Save benchmark results to CSV for plotting
-void saveBenchmarkResults(const std::vector<BenchmarkResult>& results, const std::string& filename) {
+// Generate Python plotting script
+void generatePlottingScript(const std::vector<BenchmarkResult>& results, 
+                           const std::string& title,
+                           const std::string& filename) {
     std::ofstream file(filename);
-    file << "n,r,smoothing,success_rate,avg_path_length,avg_time_ms\n";
+    
+    file << "import matplotlib.pyplot as plt\n";
+    file << "import numpy as np\n\n";
+    
+    // Organize data by parameter combinations
+    std::map<std::string, std::vector<std::vector<double>>> data_map;
     
     for (const auto& res : results) {
-        file << res.n << "," << res.r << "," << res.smoothing << ","
-             << (static_cast<double>(res.successes) / 100.0) << "," << res.getAvgPathLength() << ","
-             << res.getAvgTime() << "\n";
+        std::stringstream ss;
+        ss << "n=" << res.n << ", r=" << res.r;
+        std::string label = ss.str();
+        
+        if (data_map.find(label) == data_map.end()) {
+            data_map[label] = {res.path_lengths, res.computation_times, 
+                              {static_cast<double>(res.successes) / 100.0 * 100}};
+        }
     }
+    
+    // Create figure with 3 subplots
+    file << "fig, axes = plt.subplots(1, 3, figsize=(18, 5))\n";
+    file << "fig.suptitle('" << title << "', fontsize=16)\n\n";
+    
+    // Success Rate Plot
+    file << "# Success Rate\n";
+    file << "labels = []\n";
+    file << "success_rates = []\n";
+    for (const auto& [label, data] : data_map) {
+        file << "labels.append('" << label << "')\n";
+        file << "success_rates.append(" << data[2][0] << ")\n";
+    }
+    file << "axes[0].bar(range(len(labels)), success_rates, color='steelblue')\n";
+    file << "axes[0].set_xticks(range(len(labels)))\n";
+    file << "axes[0].set_xticklabels(labels, rotation=45, ha='right')\n";
+    file << "axes[0].set_ylabel('Success Rate (%)')\n";
+    file << "axes[0].set_title('Success Rate')\n";
+    file << "axes[0].set_ylim([0, 105])\n";
+    file << "axes[0].grid(axis='y', alpha=0.3)\n\n";
+    
+    // Path Length Boxplot
+    file << "# Path Length\n";
+    file << "path_data = []\n";
+    for (const auto& [label, data] : data_map) {
+        file << "path_data.append([";
+        for (size_t i = 0; i < data[0].size(); ++i) {
+            file << data[0][i];
+            if (i < data[0].size() - 1) file << ", ";
+        }
+        file << "])\n";
+    }
+    file << "bp1 = axes[1].boxplot(path_data, labels=labels, patch_artist=True)\n";
+    file << "for patch in bp1['boxes']:\n";
+    file << "    patch.set_facecolor('lightgreen')\n";
+    file << "axes[1].set_xticklabels(labels, rotation=45, ha='right')\n";
+    file << "axes[1].set_ylabel('Path Length')\n";
+    file << "axes[1].set_title('Path Length Distribution')\n";
+    file << "axes[1].grid(axis='y', alpha=0.3)\n\n";
+    
+    // Computation Time Boxplot
+    file << "# Computation Time\n";
+    file << "time_data = []\n";
+    for (const auto& [label, data] : data_map) {
+        file << "time_data.append([";
+        for (size_t i = 0; i < data[1].size(); ++i) {
+            file << data[1][i];
+            if (i < data[1].size() - 1) file << ", ";
+        }
+        file << "])\n";
+    }
+    file << "bp2 = axes[2].boxplot(time_data, labels=labels, patch_artist=True)\n";
+    file << "for patch in bp2['boxes']:\n";
+    file << "    patch.set_facecolor('coral')\n";
+    file << "axes[2].set_xticklabels(labels, rotation=45, ha='right')\n";
+    file << "axes[2].set_ylabel('Computation Time (ms)')\n";
+    file << "axes[2].set_title('Computation Time Distribution')\n";
+    file << "axes[2].grid(axis='y', alpha=0.3)\n\n";
+    
+    file << "plt.tight_layout()\n";
+    file << "plt.savefig('" << title << "_boxplots.png', dpi=300, bbox_inches='tight')\n";
+    file << "plt.show()\n";
+    file << "print('Saved plot: " << title << "_boxplots.png')\n";
+    
     file.close();
-    std::cout << "Saved results to " << filename << std::endl;
+    std::cout << "Generated plotting script: " << filename << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -159,8 +236,9 @@ int main(int argc, char** argv) {
         Visualizer::makeFigure(problem_hw5, smoothed_path_hw5);
     }
 
-    saveBenchmarkResults(hw5_results, "hw5_benchmark_results.csv");
-    saveBenchmarkResults(hw5_smooth_results, "hw5_smooth_benchmark_results.csv");
+    // Generate plotting scripts
+    generatePlottingScript(hw5_results, "HW5_Benchmark", "plot_hw5.py");
+    generatePlottingScript(hw5_smooth_results, "HW5_Smoothed_Benchmark", "plot_hw5_smooth.py");
 
     // =========================================================
     // Part (b): HW2 Workspaces
@@ -180,7 +258,7 @@ int main(int argc, char** argv) {
     }
     
     std::cout << "\n(b).i: Creating W2 roadmap visualization..." << std::endl;
-    MyPRM prm_w2(500, 2.0, false); // Increased n to give it a better chance
+    MyPRM prm_w2(500, 2.0, false);
     Path2D path_w2 = prm_w2.plan(problem_w2);
     if (!path_w2.waypoints.empty()) {
         std::cout << "HW2 W2 (n=500, r=2.0) Path Length: " << calculatePathLength(path_w2) << std::endl;
@@ -228,17 +306,18 @@ int main(int argc, char** argv) {
         Visualizer::makeFigure(problem_w1, smoothed_path_w1);
     }
     
-    MyPRM prm_w2_smooth(500, 2.0, true); 
+    MyPRM prm_w2_smooth(500, 2.0, true);
     Path2D smoothed_path_w2 = prm_w2_smooth.plan(problem_w2);
     if (!smoothed_path_w2.waypoints.empty()) {
-        std::cout << "W2 Smoothed (n=1000, r=2.0) Path Length: " << calculatePathLength(smoothed_path_w2) << std::endl;
+        std::cout << "W2 Smoothed (n=500, r=2.0) Path Length: " << calculatePathLength(smoothed_path_w2) << std::endl;
         Visualizer::makeFigure(problem_w2, smoothed_path_w2);
     }
     
-    saveBenchmarkResults(w1_results, "w1_benchmark_results.csv");
-    saveBenchmarkResults(w1_smooth_results, "w1_smooth_benchmark_results.csv");
-    saveBenchmarkResults(w2_results, "w2_benchmark_results.csv");
-    saveBenchmarkResults(w2_smooth_results, "w2_smooth_benchmark_results.csv");
+    // Generate all plotting scripts
+    generatePlottingScript(w1_results, "W1_Benchmark", "plot_w1.py");
+    generatePlottingScript(w1_smooth_results, "W1_Smoothed_Benchmark", "plot_w1_smooth.py");
+    generatePlottingScript(w2_results, "W2_Benchmark", "plot_w2.py");
+    generatePlottingScript(w2_smooth_results, "W2_Smoothed_Benchmark", "plot_w2_smooth.py");
 
     // =========================================================
     // Print Summary
@@ -253,6 +332,12 @@ int main(int argc, char** argv) {
     std::cout << "W1 without smoothing: Best with n=500, r=2 for reliability and speed" << std::endl;
     std::cout << "W2 without smoothing: Requires n=1000, r=2 due to narrow passages" << std::endl;
     std::cout << "With smoothing (W1 & W2): n=500, r=2 provides good balance of speed and success rate" << std::endl;
+
+    std::cout << "\n========== PLOTTING INSTRUCTIONS ==========" << std::endl;
+    std::cout << "Python plotting scripts have been generated in your working directory:" << std::endl;
+    std::cout << "  - plot_hw5.py\n  - plot_hw5_smooth.py\n  - plot_w1.py\n  - plot_w1_smooth.py\n  - plot_w2.py\n  - plot_w2_smooth.py" << std::endl;
+    std::cout << "\nTo generate boxplots, run: python plot_hw5.py" << std::endl;
+    std::cout << "(Repeat for each .py file)" << std::endl;
 
     Visualizer::saveFigures();
     
