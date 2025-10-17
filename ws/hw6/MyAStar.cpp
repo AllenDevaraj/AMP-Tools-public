@@ -4,7 +4,6 @@
 #include <map>
 #include <limits>
 #include <algorithm>
-#include <iostream>
 #include <list>
 
 struct NodeInfo {
@@ -16,8 +15,7 @@ struct NodeInfo {
     }
 };
 
-
-// A* algorithm
+// A* algorithm (Silent version for benchmarking)
 amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem& problem, const amp::SearchHeuristic& heuristic) {
     const std::shared_ptr<amp::Graph<double>>& graph = problem.graph;
     const amp::Node start_node = problem.init_node;
@@ -26,7 +24,7 @@ amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem
 
     std::priority_queue<NodeInfo, std::vector<NodeInfo>, std::greater<NodeInfo>> open_set;
     std::map<amp::Node, amp::Node> came_from; 
-    std::map<amp::Node, double> g_score;     // Cost from start to current node
+    std::map<amp::Node, double> g_score;
 
     for (const auto& node : all_nodes) {
         g_score[node] = std::numeric_limits<double>::infinity();
@@ -36,12 +34,9 @@ amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem
     g_score[start_node] = 0.0;
     double start_f_score = heuristic(start_node);
     open_set.push({start_node, start_f_score});
-    
-    int iterations = 0;
-    
+
     // A* loop
     while (!open_set.empty()) {
-        iterations++;
         amp::Node current = open_set.top().node;
         open_set.pop();
 
@@ -58,20 +53,6 @@ amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem
             result.success = true;
             result.path_cost = g_score[goal_node];
             result.node_path = path_list;
-            
-            std::cout << "A* search completed." << std::endl;
-            std::cout << "  - Iterations: " << iterations << std::endl;
-            std::cout << "  - Path Cost: " << result.path_cost << std::endl;
-            std::cout << "  - Path: ";
-            bool first = true;
-            for (const auto& node : result.node_path) {
-                if (!first) {
-                    std::cout << " -> ";
-                }
-                std::cout << node;
-                first = false;
-            }
-            std::cout << std::endl;
 
             return result;
         }
@@ -93,6 +74,6 @@ amp::AStar::GraphSearchResult MyAStarAlgo::search(const amp::ShortestPathProblem
         }
     }
 
-    std::cout << "A* search failed to find a path from " << start_node << " to " << goal_node << "." << std::endl;
+    // Failed to find path - return silently
     return {false, {}, 0.0};
 }

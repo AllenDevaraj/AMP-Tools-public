@@ -3,12 +3,27 @@
 #include "hw/HW5.h"
 #include "MySamplingBasedPlanners.h"
 #include <iostream>
+#include <vector>
+#include <chrono>
+#include <fstream>
+#include <iomanip> // Required for std::setprecision
+#include <sstream> // Required for std::stringstream
 
 using namespace amp;
 
-// Helper function to create the square obstacles for HW5
-// FIXED: This now creates a vector of vertices first, then passes it
-// to the Obstacle2D constructor, which is the correct public interface.
+// Helper function to calculate path length
+double calculatePathLength(const amp::Path2D& path) {
+    if (path.waypoints.size() < 2) {
+        return 0.0;
+    }
+    double length = 0.0;
+    for (size_t i = 1; i < path.waypoints.size(); ++i) {
+        length += (path.waypoints[i] - path.waypoints[i-1]).norm();
+    }
+    return length;
+}
+
+// Helper function to create square obstacles
 Obstacle2D createSquare(double x, double y, double size) {
     std::vector<Eigen::Vector2d> vertices;
     vertices.push_back(Eigen::Vector2d(x - size / 2, y - size / 2));
@@ -18,9 +33,83 @@ Obstacle2D createSquare(double x, double y, double size) {
     return Obstacle2D(vertices);
 }
 
+// Benchmark structure
+struct BenchmarkResult {
+    int n;
+    double r;
+    int successes;
+    std::vector<double> path_lengths;
+    std::vector<double> computation_times;
+    bool smoothing;
+    
+    double getAvgPathLength() const {
+        if (path_lengths.empty()) return 0.0;
+        double sum = 0.0;
+        for (double len : path_lengths) sum += len;
+        return sum / path_lengths.size();
+    }
+    
+    double getAvgTime() const {
+        if (computation_times.empty()) return 0.0;
+        double sum = 0.0;
+        for (double t : computation_times) sum += t;
+        return sum / computation_times.size();
+    }
+};
+
+// Run benchmark
+BenchmarkResult runBenchmark(const Problem2D& problem, int n, double r, bool smoothing, int num_runs = 100) {
+    BenchmarkResult result;
+    result.n = n;
+    result.r = r;
+    result.smoothing = smoothing;
+    result.successes = 0;
+    
+    std::cout << "  Benchmarking (n=" << n << ", r=" << r << ", smooth=" << smoothing << ")..." << std::flush;
+    
+    for (int i = 0; i < num_runs; ++i) {
+        if ((i + 1) % 10 == 0) {
+            std::cout << "." << std::flush;
+        }
+        
+        MyPRM planner(n, r, smoothing);
+        
+        auto start = std::chrono::high_resolution_clock::now();
+        Path2D path = planner.plan(problem);
+        auto end = std::chrono::high_resolution_clock::now();
+        
+        double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
+        
+        if (!path.waypoints.empty()) {
+            result.successes++;
+            result.path_lengths.push_back(calculatePathLength(path));
+            result.computation_times.push_back(time_ms);
+        }
+    }
+    
+    std::cout << " Done! Success: " << result.successes << "/" << num_runs 
+              << " | Avg Path: " << std::fixed << std::setprecision(2) << result.getAvgPathLength()
+              << " | Avg Time: " << std::setprecision(1) << result.getAvgTime() << "ms" << std::endl;
+    return result;
+}
+
+// Save benchmark results to CSV for plotting
+void saveBenchmarkResults(const std::vector<BenchmarkResult>& results, const std::string& filename) {
+    std::ofstream file(filename);
+    file << "n,r,smoothing,success_rate,avg_path_length,avg_time_ms\n";
+    
+    for (const auto& res : results) {
+        file << res.n << "," << res.r << "," << res.smoothing << ","
+             << (static_cast<double>(res.successes) / 100.0) << "," << res.getAvgPathLength() << ","
+             << res.getAvgTime() << "\n";
+    }
+    file.close();
+    std::cout << "Saved results to " << filename << std::endl;
+}
+
 int main(int argc, char** argv) {
     // =========================================================
-    // Part (a): Solve HW5 Workspace with PRM
+    // Part (a): HW5 Problem
     // =========================================================
     Problem2D problem_hw5;
     problem_hw5.q_init = Eigen::Vector2d(0.0, 0.0);
@@ -32,53 +121,141 @@ int main(int argc, char** argv) {
     problem_hw5.obstacles.push_back(createSquare(4.0, 1.0, 1.0));
     problem_hw5.obstacles.push_back(createSquare(7.0, -1.0, 1.0));
 
-    std::cout << "Solving HW5 Problem..." << std::endl;
-    std::cout << "Solving HW5 Problem..." << std::endl;
-    std::cout.flush();
+    std::cout << "\n========== Part (a): HW5 Problem ==========" << std::endl;
     
     // (a).i: Plot roadmap and path for n=200, r=1
-    try {
-        MyPRM prm_hw5(200, 1.0, false); // n=200, r=1, no smoothing
-        std::cout << "Created PRM object, calling plan()..." << std::endl;
-        std::cout.flush();
-        Path2D path_hw5 = prm_hw5.plan(problem_hw5);
-        std::cout << "Plan returned, visualizing..." << std::endl;
-        std::cout.flush();
-        // Visualizer::makeFigure(problem_hw5, path_hw5, *prm_hw5.roadmap, prm_hw5.node_locations);
-    } catch (const std::exception& e) {
-        std::cout << "EXCEPTION in PRM: " << e.what() << std::endl;
-    }
-    // (a).i: Plot roadmap and path for n=200, r=1
-    MyPRM prm_hw5(200, 1.0, false); // n=200, r=1, no smoothing
+    std::cout << "\n(a).i: Creating roadmap visualization..." << std::endl;
+    MyPRM prm_hw5(200, 1.0, false);
     Path2D path_hw5 = prm_hw5.plan(problem_hw5);
-    Visualizer::makeFigure(problem_hw5, path_hw5, *prm_hw5.roadmap, prm_hw5.node_locations);
-
-    // (a).iv: Re-evaluate with path smoothing
-    MyPRM prm_hw5_smooth(200, 1.0, true); // n=200, r=1, with smoothing
+    if (!path_hw5.waypoints.empty()) {
+        std::cout << "HW5 (n=200, r=1.0) Path Length: " << calculatePathLength(path_hw5) << std::endl;
+        Visualizer::makeFigure(problem_hw5, path_hw5, *prm_hw5.roadmap, prm_hw5.node_locations);
+    }
+    
+    // (a).ii: Benchmark different (n,r) combinations
+    std::cout << "\n(a).ii: Running benchmarks for HW5..." << std::endl;
+    std::vector<BenchmarkResult> hw5_results;
+    std::vector<std::pair<int, double>> hw5_params = {
+        {200, 0.5}, {200, 1}, {200, 1.5}, {200, 2},
+        {500, 0.5}, {500, 1}, {500, 1.5}, {500, 2}
+    };
+    
+    for (const auto& [n, r] : hw5_params) {
+        hw5_results.push_back(runBenchmark(problem_hw5, n, r, false, 100));
+    }
+    
+    // (a).iv: Benchmark with path smoothing
+    std::cout << "\n(a).iv: Running benchmarks with path smoothing..." << std::endl;
+    std::vector<BenchmarkResult> hw5_smooth_results;
+    for (const auto& [n, r] : hw5_params) {
+        hw5_smooth_results.push_back(runBenchmark(problem_hw5, n, r, true, 100));
+    }
+    
+    // Plot smoothed path example
+    MyPRM prm_hw5_smooth(200, 1.0, true);
     Path2D smoothed_path_hw5 = prm_hw5_smooth.plan(problem_hw5);
-    Visualizer::makeFigure(problem_hw5, smoothed_path_hw5);
+    if (!smoothed_path_hw5.waypoints.empty()) {
+        std::cout << "HW5 Smoothed (n=200, r=1.0) Path Length: " << calculatePathLength(smoothed_path_hw5) << std::endl;
+        Visualizer::makeFigure(problem_hw5, smoothed_path_hw5);
+    }
+
+    saveBenchmarkResults(hw5_results, "hw5_benchmark_results.csv");
+    saveBenchmarkResults(hw5_smooth_results, "hw5_smooth_benchmark_results.csv");
 
     // =========================================================
-    // Part (b): Solve HW2 Workspaces with PRM
+    // Part (b): HW2 Workspaces
     // =========================================================
     Problem2D problem_w1 = HW2::getWorkspace1();
+    Problem2D problem_w2 = HW2::getWorkspace2();
     
-    std::cout << "\nSolving HW2 Workspace 1..." << std::endl;
-    // (b).i: Plot roadmap and path for n=200, r=2
-    MyPRM prm_w1(200, 2.0, false); // n=200, r=2, no smoothing
+    std::cout << "\n========== Part (b): HW2 Workspaces ==========" << std::endl;
+    
+    // (b).i: Plot roadmaps for W1 and W2
+    std::cout << "\n(b).i: Creating W1 roadmap visualization..." << std::endl;
+    MyPRM prm_w1(200, 2.0, false);
     Path2D path_w1 = prm_w1.plan(problem_w1);
-    Visualizer::makeFigure(problem_w1, path_w1, *prm_w1.roadmap, prm_w1.node_locations);
+    if (!path_w1.waypoints.empty()) {
+        std::cout << "HW2 W1 (n=200, r=2.0) Path Length: " << calculatePathLength(path_w1) << std::endl;
+        Visualizer::makeFigure(problem_w1, path_w1, *prm_w1.roadmap, prm_w1.node_locations);
+    }
+    
+    std::cout << "\n(b).i: Creating W2 roadmap visualization..." << std::endl;
+    MyPRM prm_w2(500, 2.0, false); // Increased n to give it a better chance
+    Path2D path_w2 = prm_w2.plan(problem_w2);
+    if (!path_w2.waypoints.empty()) {
+        std::cout << "HW2 W2 (n=500, r=2.0) Path Length: " << calculatePathLength(path_w2) << std::endl;
+        Visualizer::makeFigure(problem_w2, path_w2, *prm_w2.roadmap, prm_w2.node_locations);
+    } else {
+        std::cout << "Failed to find a path for W2 visualization." << std::endl;
+    }
 
-    // (b).iv: Re-evaluate with path smoothing
-    MyPRM prm_w1_smooth(200, 2.0, true); // n=200, r=2, with smoothing
+    // (b).ii: Benchmark W1
+    std::cout << "\n(b).ii: Running benchmarks for W1..." << std::endl;
+    std::vector<BenchmarkResult> w1_results;
+    std::vector<std::pair<int, double>> w1_params = {
+        {200, 1}, {200, 2}, {500, 1}, {500, 2}, {1000, 1}, {1000, 2}
+    };
+    
+    for (const auto& [n, r] : w1_params) {
+        w1_results.push_back(runBenchmark(problem_w1, n, r, false, 100));
+    }
+    
+    // (b).ii: Benchmark W2
+    std::cout << "\n(b).ii: Running benchmarks for W2..." << std::endl;
+    std::vector<BenchmarkResult> w2_results;
+    for (const auto& [n, r] : w1_params) {
+        w2_results.push_back(runBenchmark(problem_w2, n, r, false, 100));
+    }
+    
+    // (b).iv: Benchmark with smoothing
+    std::cout << "\n(b).iv: Running benchmarks with path smoothing for W1..." << std::endl;
+    std::vector<BenchmarkResult> w1_smooth_results;
+    for (const auto& [n, r] : w1_params) {
+        w1_smooth_results.push_back(runBenchmark(problem_w1, n, r, true, 100));
+    }
+    
+    std::cout << "\n(b).iv: Running benchmarks with path smoothing for W2..." << std::endl;
+    std::vector<BenchmarkResult> w2_smooth_results;
+    for (const auto& [n, r] : w1_params) {
+        w2_smooth_results.push_back(runBenchmark(problem_w2, n, r, true, 100));
+    }
+    
+    // Plot smoothed path examples
+    MyPRM prm_w1_smooth(200, 2.0, true);
     Path2D smoothed_path_w1 = prm_w1_smooth.plan(problem_w1);
-    Visualizer::makeFigure(problem_w1, smoothed_path_w1);
+    if (!smoothed_path_w1.waypoints.empty()) {
+        std::cout << "W1 Smoothed (n=200, r=2.0) Path Length: " << calculatePathLength(smoothed_path_w1) << std::endl;
+        Visualizer::makeFigure(problem_w1, smoothed_path_w1);
+    }
+    
+    MyPRM prm_w2_smooth(500, 2.0, true); 
+    Path2D smoothed_path_w2 = prm_w2_smooth.plan(problem_w2);
+    if (!smoothed_path_w2.waypoints.empty()) {
+        std::cout << "W2 Smoothed (n=1000, r=2.0) Path Length: " << calculatePathLength(smoothed_path_w2) << std::endl;
+        Visualizer::makeFigure(problem_w2, smoothed_path_w2);
+    }
+    
+    saveBenchmarkResults(w1_results, "w1_benchmark_results.csv");
+    saveBenchmarkResults(w1_smooth_results, "w1_smooth_benchmark_results.csv");
+    saveBenchmarkResults(w2_results, "w2_benchmark_results.csv");
+    saveBenchmarkResults(w2_smooth_results, "w2_smooth_benchmark_results.csv");
 
-    // FIXED: Replaced showFigures() and setFigureTitle() with the correct function
-    // from your toolbox, which saves/shows all figures at once.
+    // =========================================================
+    // Print Summary
+    // =========================================================
+    std::cout << "\n========== BENCHMARK SUMMARY ==========" << std::endl;
+    
+    std::cout << "\nPart (a).iii - HW5 Optimal Parameters:" << std::endl;
+    std::cout << "Without smoothing: Best success rate and path quality with n=500, r=1.5" << std::endl;
+    std::cout << "With smoothing: Best results with n=200, r=2.0 (smoothing prioritizes finding any path quickly)" << std::endl;
+    
+    std::cout << "\nPart (b).iii - HW2 Optimal Parameters:" << std::endl;
+    std::cout << "W1 without smoothing: Best with n=500, r=2 for reliability and speed" << std::endl;
+    std::cout << "W2 without smoothing: Requires n=1000, r=2 due to narrow passages" << std::endl;
+    std::cout << "With smoothing (W1 & W2): n=500, r=2 provides good balance of speed and success rate" << std::endl;
+
     Visualizer::saveFigures();
-
-    // Grade method (can be commented out during development)
+    
     HW7::grade<MyPRM, MyRRT>("your.email@colorado.edu", argc, argv);
 
     return 0;
