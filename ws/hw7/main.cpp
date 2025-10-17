@@ -341,7 +341,7 @@ int main(int argc, char** argv) {
 
     Visualizer::saveFigures();
     
-    HW7::grade<MyPRM, MyRRT>("your.email@colorado.edu", argc, argv);
+    HW7::grade<MyPRM, MyRRT>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv);
 
     return 0;
 }
