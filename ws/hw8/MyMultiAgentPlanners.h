@@ -14,6 +14,10 @@
 class MyCentralPlanner : public amp::CentralizedMultiAgentRRT {
     public:
         virtual amp::MultiAgentPath2D plan(const amp::MultiAgentProblem2D& problem) override; 
+
+        // *** FIX: Add these two public variables ***
+        int last_tree_size = 0;
+        double last_comp_time_ms = 0.0;
 };
 
 

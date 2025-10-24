@@ -4,6 +4,7 @@
 #include <random>
 #include <limits>
 #include <vector>
+#include <chrono> // <-- 1. ADD THIS INCLUDE
 
 // Helper function for circle-polygon collision since it's missing from HelpfulClass.h
 namespace MotionPlanningHelpers {
@@ -82,15 +83,27 @@ bool isSegmentInCollision(const Eigen::VectorXd& q_start, const Eigen::VectorXd&
 }
 
 amp::MultiAgentPath2D MyCentralPlanner::plan(const amp::MultiAgentProblem2D& problem) {
+    // 2. START THE TIMER
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     const int num_agents = problem.agent_properties.size();
     
     amp::MultiAgentPath2D multi_agent_path;
     multi_agent_path.agent_paths.resize(num_agents);
 
-    if (num_agents == 0) return multi_agent_path;
+    if (num_agents == 0) {
+        // Stop timer
+        auto end_time = std::chrono::high_resolution_clock::now();
+        last_comp_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+        last_tree_size = 0;
+        return multi_agent_path;
+    }
     
     const int c_space_dim = 2 * num_agents;
-    const int n_iterations = 7500;
+    
+    // Using 50,000 iterations for better success
+    const int n_iterations = 50000; 
+    
     const double step_size = 0.5;
     const double p_goal = 0.05;
     const double epsilon = 0.25;
@@ -107,7 +120,6 @@ amp::MultiAgentPath2D MyCentralPlanner::plan(const amp::MultiAgentProblem2D& pro
     tree_nodes[0] = q_init;
     
     std::random_device rd;
-    // *** FIX: Corrected the typo from mt19137 to mt19937 ***
     std::mt19937 gen(rd()); 
     std::uniform_real_distribution<> goal_dist(0.0, 1.0);
     std::uniform_real_distribution<> x_dist(problem.x_min, problem.x_max);
@@ -175,6 +187,11 @@ amp::MultiAgentPath2D MyCentralPlanner::plan(const amp::MultiAgentProblem2D& pro
             multi_agent_path.agent_paths[i].waypoints.push_back(q_goal.segment<2>(2 * i));
         }
     }
+
+    // 3. STOP TIMER AND SAVE RESULTS
+    auto end_time = std::chrono::high_resolution_clock::now();
+    last_comp_time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+    last_tree_size = tree_nodes.size(); // This captures tree size even on failure
 
     return multi_agent_path;
 }
