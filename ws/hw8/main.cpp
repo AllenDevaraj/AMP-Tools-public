@@ -11,12 +11,7 @@
 #include <map>
 
 using namespace amp;
-
-// =================================================================
-//               BENCHMARKING STRUCTS & FUNCTIONS
-// =================================================================
-
-// Struct for Ex 1 (Centralized)
+// Ex 1 Centralized
 struct BenchmarkResultCentral {
     int num_agents;
     int successes;
@@ -33,7 +28,7 @@ struct BenchmarkResultCentral {
     }
 };
 
-// Struct for Ex 2 (Decentralized)
+// Ex 2 Decentralized
 struct BenchmarkResultDecentral {
     int num_agents;
     int successes;
@@ -45,7 +40,6 @@ struct BenchmarkResultDecentral {
     }
 };
 
-// Benchmark function for Ex 1 (Centralized)
 BenchmarkResultCentral runBenchmarkCentral(int num_agents, int num_runs = 100) {
     BenchmarkResultCentral result;
     result.num_agents = num_agents;
@@ -66,7 +60,6 @@ BenchmarkResultCentral runBenchmarkCentral(int num_agents, int num_runs = 100) {
     return result;
 }
 
-// Benchmark function for Ex 2 (Decentralized)
 BenchmarkResultDecentral runBenchmarkDecentral(int num_agents, int num_runs = 100) {
     BenchmarkResultDecentral result;
     result.num_agents = num_agents;
@@ -86,11 +79,7 @@ BenchmarkResultDecentral runBenchmarkDecentral(int num_agents, int num_runs = 10
     return result;
 }
 
-// =================================================================
-//                     PLOTTING FUNCTIONS
-// =================================================================
-
-// Plotting script for Ex 1
+// Ex 1
 void generatePlottingScriptCentral(const std::vector<BenchmarkResultCentral>& results) {
     std::string filename = "plot_hw8_centralized_benchmark.py";
     std::ofstream file(filename);
@@ -137,7 +126,7 @@ void generatePlottingScriptCentral(const std::vector<BenchmarkResultCentral>& re
     file << "print('Generated " << filename << "')\n"; file.close();
 }
 
-// Plotting script for Ex 2
+// Ex 2
 void generatePlottingScriptDecentral(const std::vector<BenchmarkResultDecentral>& results) {
     std::string filename = "plot_hw8_decentralized_benchmark.py";
     std::ofstream file(filename);
@@ -176,33 +165,50 @@ void generatePlottingScriptDecentral(const std::vector<BenchmarkResultDecentral>
     file.close();
 }
 
-// =================================================================
-//                        MAIN FUNCTION
-// =================================================================
-
 int main(int argc, char** argv) {
     amp::RNG::seed(amp::RNG::randiUnbounded());
     std::vector<int> agent_counts = {2, 3, 4, 5, 6};
+    for (int m : agent_counts) {
+        std::cout << "\n--- Visualizing for m = " << m << " ---" << std::endl;
+        // Centralized (Ex 1b)
+        std::cout << "Running Centralized Planner (m=" << m << ")..." << std::flush;
+        MyCentralPlanner central_planner;
+        MultiAgentProblem2D problem_cen = HW8::getWorkspace1(m);
+        MultiAgentPath2D path_cen;
+        int central_attempts = 0;
+        do {
+            path_cen = central_planner.plan(problem_cen);
+            central_attempts++;
+            if (central_attempts > 1 && central_attempts % 10 == 0) std::cout << "." << std::flush; // Show progress
+        } while ((path_cen.agent_paths.empty() || path_cen.agent_paths[0].waypoints.empty()) && central_attempts < 100); // 100 attempt limit
 
-    // --- Part 1: Single Visualization Runs (Ex 1b and 2b) ---
-    std::cout << "\n========== Running Single Visualizations (m=2) ==========" << std::endl;
-    
-    // Centralized (Ex 1b)
-    std::cout << "Running Centralized Planner (m=2)..." << std::endl;
-    MyCentralPlanner central_planner;
-    MultiAgentProblem2D problem_cen_2 = HW8::getWorkspace1(2);
-    MultiAgentPath2D path_cen_2 = central_planner.plan(problem_cen_2);
-    Visualizer::makeFigure(problem_cen_2, path_cen_2);
+        if (central_attempts >= 100) {
+            std::cout << " FAILED TO VISUALIZE (100 attempts)" << std::endl;
+        } else {
+            std::cout << " Found in " << central_attempts << " attempt(s)." << std::endl;
+        }
+        // Visualizer::makeFigure(problem_cen, path_cen);
 
-    // Decentralized (Ex 2b)
-    std::cout << "Running Decentralized Planner (m=2)..." << std::endl;
-    MyDecentralPlanner decentral_planner;
-    MultiAgentProblem2D problem_dec_2 = HW8::getWorkspace1(2);
-    MultiAgentPath2D path_dec_2 = decentral_planner.plan(problem_dec_2);
-    Visualizer::makeFigure(problem_dec_2, path_dec_2);
+        // Decentralized (Ex 2b)
+        std::cout << "Running Decentralized Planner (m=" << m << ")..." << std::flush;
+        MyDecentralPlanner decentral_planner;
+        MultiAgentProblem2D problem_dec = HW8::getWorkspace1(m);
+        MultiAgentPath2D path_dec;
+        int decentral_attempts = 0;
+        do {
+            path_dec = decentral_planner.plan(problem_dec);
+            decentral_attempts++;
+        } while ((path_dec.agent_paths.empty() || path_dec.agent_paths.back().waypoints.empty()) && decentral_attempts < 100); // 100 attempt limit
 
-    // --- Part 2: Benchmark for Ex 1 (Centralized) ---
-    std::cout << "\n========== HW8 Central Planner Benchmark (Ex 1) ==========" << std::endl;
+        if (decentral_attempts >= 100) {
+            std::cout << " FAILED TO VISUALIZE (100 attempts)" << std::endl;
+        } else {
+            std::cout << " Found in " << decentral_attempts << " attempt(s)." << std::endl;
+        }
+        // Visualizer::makeFigure(problem_dec, path_dec);
+    }
+    // Benchmark for Ex 1 (Centralized)
+    std::cout << "\n            HW8 Central Planner Benchmark (Ex 1)           " << std::endl;
     std::vector<BenchmarkResultCentral> central_results;
     for (int m : agent_counts) {
         central_results.push_back(runBenchmarkCentral(m, 100));
@@ -218,8 +224,8 @@ int main(int argc, char** argv) {
                   << std::fixed << std::setprecision(2) << res.getAvgTime() << std::endl;
     }
 
-    // --- Part 3: Benchmark for Ex 2 (Decentralized) ---
-    std::cout << "\n========== HW8 Decentralized Planner Benchmark (Ex 2) ==========" << std::endl;
+    // Benchmark for Ex 2 (Decentralized)
+    std::cout << "\n           HW8 Decentralized Planner Benchmark (Ex 2)           " << std::endl;
     std::vector<BenchmarkResultDecentral> decentral_results;
     for (int m : agent_counts) {
         decentral_results.push_back(runBenchmarkDecentral(m, 100));
@@ -234,11 +240,9 @@ int main(int argc, char** argv) {
                   << std::fixed << std::setprecision(2) << res.getAvgTime() << std::endl;
     }
 
-    // --- Part 4: Finalize ---
-    std::cout << "\n==============================================" << std::endl;
-    std::cout << "All visualizations and benchmarks complete." << std::endl;
-    std::cout << "Python scripts generated. Closing figures..." << std::endl;
+    std::cout << "\nAll visualizations and benchmarks complete." << std::endl;
     
-    Visualizer::saveFigures();
+    // Visualizer::saveFigures();
+    HW8::grade<MyCentralPlanner, MyDecentralPlanner>("AllenDevaraj.AugustinPonraj@colorado.edu", argc, argv, std::make_tuple(), std::make_tuple());
     return 0;
 }

@@ -6,10 +6,7 @@
 #include <vector>
 #include <chrono>
 
-// =================================================================
-//                 EXERCISE 1: CENTRALIZED PLANNER
-// =================================================================
-
+// EXERCISE 1: CENTRALIZED PLANNER
 namespace MotionPlanningHelpers {
     double pointSegmentDistance(const Eigen::Vector2d& p, const Eigen::Vector2d& a, const Eigen::Vector2d& b, Eigen::Vector2d& closest_point) {
         Eigen::Vector2d ab = b - a;
@@ -72,7 +69,7 @@ amp::MultiAgentPath2D MyCentralPlanner::plan(const amp::MultiAgentProblem2D& pro
         return multi_agent_path;
     }
     const int c_space_dim = 2 * num_agents;
-    const int n_iterations = 50000; 
+    const int n_iterations = 7500; 
     const double step_size = 0.5;
     const double p_goal = 0.05;
     const double epsilon = 0.25;
@@ -136,10 +133,7 @@ amp::MultiAgentPath2D MyCentralPlanner::plan(const amp::MultiAgentProblem2D& pro
 }
 
 
-// =================================================================
-//               EXERCISE 2: DECENTRALIZED PLANNER
-// =================================================================
-
+// EXERCISE 2: DECENTRALIZED PLANNER
 bool isDecentralizedCollision(const Eigen::Vector2d& q_new, int new_depth, double agent_radius,
                               const std::vector<amp::Obstacle2D>& static_obstacles,
                               const std::vector<amp::Path2D>& planned_paths,

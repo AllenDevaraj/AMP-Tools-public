@@ -14,17 +14,12 @@
 class MyCentralPlanner : public amp::CentralizedMultiAgentRRT {
     public:
         virtual amp::MultiAgentPath2D plan(const amp::MultiAgentProblem2D& problem) override; 
-
-        // Public variables for benchmarking Ex 1
         int last_tree_size = 0;
         double last_comp_time_ms = 0.0;
 };
 
-
 class MyDecentralPlanner : public amp::DecentralizedMultiAgentRRT {
     public:
         virtual amp::MultiAgentPath2D plan(const amp::MultiAgentProblem2D& problem) override;
-
-        // *** ADDED THIS FOR EX 2 BENCHMARKING ***
         double last_comp_time_ms = 0.0;
 };
