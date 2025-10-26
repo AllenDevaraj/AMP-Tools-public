@@ -69,7 +69,7 @@ amp::MultiAgentPath2D MyCentralPlanner::plan(const amp::MultiAgentProblem2D& pro
         return multi_agent_path;
     }
     const int c_space_dim = 2 * num_agents;
-    const int n_iterations = 7500; 
+    const int n_iterations = 50000; 
     const double step_size = 0.5;
     const double p_goal = 0.05;
     const double epsilon = 0.25;
@@ -188,7 +188,7 @@ amp::MultiAgentPath2D MyDecentralPlanner::plan(const amp::MultiAgentProblem2D& p
     std::vector<amp::Path2D> planned_paths; 
     std::vector<double> planned_radii; 
 
-    const int n_iterations = 7500;
+    const int n_iterations = 150000;
     const double step_size = 0.5;
     const double p_goal = 0.05;
     const double epsilon = 0.25;

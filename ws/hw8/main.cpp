@@ -169,9 +169,9 @@ int main(int argc, char** argv) {
     amp::RNG::seed(amp::RNG::randiUnbounded());
     std::vector<int> agent_counts = {2, 3, 4, 5, 6};
     for (int m : agent_counts) {
-        std::cout << "\n--- Visualizing for m = " << m << " ---" << std::endl;
+        std::cout << "\nVisualizing for m = " << m << " " << std::endl;
         // Centralized (Ex 1b)
-        std::cout << "Running Centralized Planner (m=" << m << ")..." << std::flush;
+        std::cout << "Running Centralized Planner (m=" << m << ")" << std::flush;
         MyCentralPlanner central_planner;
         MultiAgentProblem2D problem_cen = HW8::getWorkspace1(m);
         MultiAgentPath2D path_cen;
